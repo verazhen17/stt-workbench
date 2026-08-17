@@ -1,0 +1,22 @@
+{
+  "stream_id": "214744544",
+  "run_id": "whisper_v2_20260817150000",
+  "model": {
+    "provider": "whisper",
+    "name": "whisper_large_v3",
+    "params": {
+      "temperature": 0.2,
+      "beam_size": 5,
+      "vad_filter": false
+    }
+  },
+  "created_at": "2026-08-17T06:00:00Z",
+  "segments": [
+    {
+      "segment_id": "seg_b_001",
+      "start_ms": 100,
+      "end_ms": 950,
+      "text": "大家晚安"
+    }
+  ]
+}
