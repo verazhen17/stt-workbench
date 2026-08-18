@@ -5,8 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"math"
 	"net/url"
-	"path"
+	"os/exec"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -21,24 +23,72 @@ type DurationProber interface {
 	ProbeMilliseconds(context.Context, string) (int64, error)
 }
 
+type FFprobeDurationProber struct {
+	executablePath string
+}
+
+var _ DurationProber = (*FFprobeDurationProber)(nil)
+
+func NewFFprobeDurationProber(executablePath string) *FFprobeDurationProber {
+	return &FFprobeDurationProber{executablePath: executablePath}
+}
+
+func (prober *FFprobeDurationProber) ProbeMilliseconds(ctx context.Context, sourcePath string) (int64, error) {
+	output, err := exec.CommandContext(
+		ctx,
+		prober.executablePath,
+		"-v", "error",
+		"-show_entries", "format=duration",
+		"-of", "default=noprint_wrappers=1:nokey=1",
+		sourcePath,
+	).Output()
+	if err != nil {
+		return 0, fmt.Errorf("run ffprobe: %w", err)
+	}
+
+	durationText := strings.TrimSpace(string(output))
+	if durationText == "" {
+		return 0, fmt.Errorf("parse ffprobe duration: empty output")
+	}
+	durationSeconds, err := strconv.ParseFloat(durationText, 64)
+	if err != nil {
+		return 0, fmt.Errorf("parse ffprobe duration: %w", err)
+	}
+	if math.IsNaN(durationSeconds) || math.IsInf(durationSeconds, 0) || durationSeconds <= 0 {
+		return 0, fmt.Errorf("parse ffprobe duration: duration must be finite and positive")
+	}
+
+	durationMilliseconds := math.Round(durationSeconds * 1_000)
+	if math.IsInf(durationMilliseconds, 0) || durationMilliseconds <= 0 || durationMilliseconds >= float64(math.MaxInt64) {
+		return 0, fmt.Errorf("parse ffprobe duration: milliseconds out of range")
+	}
+	return int64(durationMilliseconds), nil
+}
+
 type VODCatalog interface {
 	List(context.Context, string) ([]VOD, error)
 }
 
 type FilesystemVODCatalog struct {
 	filesystem ReadFS
+	sourceRoot string
 	urlPrefix  string
 	prober     DurationProber
 }
 
 var _ VODCatalog = (*FilesystemVODCatalog)(nil)
 
-func NewFilesystemVODCatalog(filesystem ReadFS, urlPrefix string, prober DurationProber) *FilesystemVODCatalog {
+func NewFilesystemVODCatalog(filesystem ReadFS, sourceRoot, urlPrefix string, prober DurationProber) (*FilesystemVODCatalog, error) {
+	absoluteRoot, err := filepath.Abs(sourceRoot)
+	if err != nil {
+		return nil, fmt.Errorf("resolve VOD source root: %w", err)
+	}
 	return &FilesystemVODCatalog{
 		filesystem: filesystem,
+		sourceRoot: filepath.Clean(absoluteRoot),
 		urlPrefix:  strings.TrimRight(urlPrefix, "/"),
 		prober:     prober,
-	}
+	}, nil
 }
 
 func (catalog *FilesystemVODCatalog) List(ctx context.Context, streamID string) ([]VOD, error) {
@@ -90,13 +140,16 @@ func (catalog *FilesystemVODCatalog) List(ctx context.Context, streamID string) 
 	vods := make([]VOD, 0, len(discovered))
 	var timelineMS int64
 	for _, item := range discovered {
-		relativePath := path.Join(streamID, item.filename)
-		durationMS, err := catalog.prober.ProbeMilliseconds(ctx, relativePath)
+		sourcePath, err := catalog.resolveSourcePath(streamID, item.filename)
 		if err != nil {
-			return nil, fmt.Errorf("%w: probe %q: %v", ErrVODIngestionFailed, relativePath, err)
+			return nil, fmt.Errorf("%w: %v", ErrVODIngestionFailed, err)
+		}
+		durationMS, err := catalog.prober.ProbeMilliseconds(ctx, sourcePath)
+		if err != nil {
+			return nil, fmt.Errorf("%w: probe %q: %v", ErrVODIngestionFailed, sourcePath, err)
 		}
 		if durationMS < 0 {
-			return nil, fmt.Errorf("%w: probe %q returned negative duration", ErrVODIngestionFailed, relativePath)
+			return nil, fmt.Errorf("%w: probe %q returned negative duration", ErrVODIngestionFailed, sourcePath)
 		}
 
 		item.vod.URL = catalog.urlPrefix + "/" + url.PathEscape(streamID) + "/" + url.PathEscape(item.filename)
@@ -107,6 +160,18 @@ func (catalog *FilesystemVODCatalog) List(ctx context.Context, streamID string) 
 		vods = append(vods, item.vod)
 	}
 	return vods, nil
+}
+
+func (catalog *FilesystemVODCatalog) resolveSourcePath(streamID, filename string) (string, error) {
+	sourcePath := filepath.Join(catalog.sourceRoot, filepath.FromSlash(streamID), filename)
+	relativePath, err := filepath.Rel(catalog.sourceRoot, sourcePath)
+	if err != nil {
+		return "", fmt.Errorf("resolve VOD source path: %w", err)
+	}
+	if relativePath == ".." || strings.HasPrefix(relativePath, ".."+string(filepath.Separator)) || filepath.IsAbs(relativePath) {
+		return "", fmt.Errorf("VOD source path escapes root")
+	}
+	return sourcePath, nil
 }
 
 func parseVODFilename(filename string) (VOD, error) {

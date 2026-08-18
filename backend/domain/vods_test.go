@@ -3,13 +3,56 @@ package domain_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/17media/stt-workbench/backend/domain"
 )
+
+const (
+	helperEnabled = "FFPROBE_HELPER_ENABLED"
+	helperMode    = "FFPROBE_HELPER_MODE"
+	helperOutput  = "FFPROBE_HELPER_OUTPUT"
+	helperSource  = "FFPROBE_HELPER_SOURCE"
+)
+
+func TestMain(m *testing.M) {
+	if os.Getenv(helperEnabled) == "1" {
+		runFFprobeHelper()
+		return
+	}
+	os.Exit(m.Run())
+}
+
+func runFFprobeHelper() {
+	want := []string{
+		"-v", "error",
+		"-show_entries", "format=duration",
+		"-of", "default=noprint_wrappers=1:nokey=1",
+		os.Getenv(helperSource),
+	}
+	if !reflect.DeepEqual(os.Args[1:], want) {
+		fmt.Fprintf(os.Stderr, "args = %#v, want %#v", os.Args[1:], want)
+		os.Exit(2)
+	}
+
+	switch os.Getenv(helperMode) {
+	case "success":
+		fmt.Fprint(os.Stdout, os.Getenv(helperOutput))
+	case "failure":
+		fmt.Fprint(os.Stderr, "sensitive ffprobe output")
+		os.Exit(3)
+	case "sleep":
+		time.Sleep(10 * time.Second)
+	default:
+		os.Exit(4)
+	}
+}
 
 type fakeDurationProber struct {
 	durations map[string]int64
@@ -47,11 +90,11 @@ func TestVODCatalogDiscoversSortedVODsWithCumulativeTimeline(t *testing.T) {
 	}
 
 	prober := &fakeDurationProber{durations: map[string]int64{
-		"214744545/1780967564_001_first.flv":  1_000,
-		"214744545/1780967564_002_second.flv": 2_500,
-		"214744545/1780974764_010_later.flv":  3_000,
+		filepath.Join(root, "214744545", "1780967564_001_first.flv"):  1_000,
+		filepath.Join(root, "214744545", "1780967564_002_second.flv"): 2_500,
+		filepath.Join(root, "214744545", "1780974764_010_later.flv"):  3_000,
 	}}
-	catalog := domain.NewFilesystemVODCatalog(os.DirFS(root), "/vod/", prober)
+	catalog := newFilesystemVODCatalog(t, root, "/vod/", prober)
 
 	got, err := catalog.List(context.Background(), streamID)
 	if err != nil {
@@ -66,9 +109,9 @@ func TestVODCatalogDiscoversSortedVODsWithCumulativeTimeline(t *testing.T) {
 		t.Fatalf("List() = %#v, want %#v", got, want)
 	}
 	wantPaths := []string{
-		"214744545/1780967564_001_first.flv",
-		"214744545/1780967564_002_second.flv",
-		"214744545/1780974764_010_later.flv",
+		filepath.Join(root, "214744545", "1780967564_001_first.flv"),
+		filepath.Join(root, "214744545", "1780967564_002_second.flv"),
+		filepath.Join(root, "214744545", "1780974764_010_later.flv"),
 	}
 	if !reflect.DeepEqual(prober.paths, wantPaths) {
 		t.Fatalf("probed paths = %#v, want %#v", prober.paths, wantPaths)
@@ -80,7 +123,7 @@ func TestVODCatalogReturnsEmptySliceWhenStreamHasNoFLVs(t *testing.T) {
 	if err := os.Mkdir(filepath.Join(root, "stream-1"), 0o755); err != nil {
 		t.Fatalf("create stream directory: %v", err)
 	}
-	catalog := domain.NewFilesystemVODCatalog(os.DirFS(root), "/vod", &fakeDurationProber{})
+	catalog := newFilesystemVODCatalog(t, root, "/vod", &fakeDurationProber{})
 
 	got, err := catalog.List(context.Background(), "stream-1")
 	if err != nil {
@@ -92,7 +135,8 @@ func TestVODCatalogReturnsEmptySliceWhenStreamHasNoFLVs(t *testing.T) {
 }
 
 func TestVODCatalogReportsMissingStream(t *testing.T) {
-	catalog := domain.NewFilesystemVODCatalog(os.DirFS(t.TempDir()), "/vod", &fakeDurationProber{})
+	root := t.TempDir()
+	catalog := newFilesystemVODCatalog(t, root, "/vod", &fakeDurationProber{})
 
 	_, err := catalog.List(context.Background(), "missing")
 	if !errors.Is(err, domain.ErrStreamNotFound) {
@@ -109,7 +153,7 @@ func TestVODCatalogReportsInvalidFilename(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(streamDirectory, "invalid.flv"), []byte("sample"), 0o644); err != nil {
 		t.Fatalf("create invalid FLV: %v", err)
 	}
-	catalog := domain.NewFilesystemVODCatalog(os.DirFS(root), "/vod", &fakeDurationProber{})
+	catalog := newFilesystemVODCatalog(t, root, "/vod", &fakeDurationProber{})
 
 	_, err := catalog.List(context.Background(), "stream-1")
 	if !errors.Is(err, domain.ErrVODIngestionFailed) {
@@ -126,7 +170,7 @@ func TestVODCatalogReportsProbeFailure(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(streamDirectory, "1780967564_000_sample.flv"), []byte("sample"), 0o644); err != nil {
 		t.Fatalf("create FLV: %v", err)
 	}
-	catalog := domain.NewFilesystemVODCatalog(os.DirFS(root), "/vod", &fakeDurationProber{err: errors.New("probe failed")})
+	catalog := newFilesystemVODCatalog(t, root, "/vod", &fakeDurationProber{err: errors.New("probe failed")})
 
 	_, err := catalog.List(context.Background(), "stream-1")
 	if !errors.Is(err, domain.ErrVODIngestionFailed) {
@@ -136,7 +180,8 @@ func TestVODCatalogReportsProbeFailure(t *testing.T) {
 
 func TestVODCatalogRejectsPathTraversal(t *testing.T) {
 	prober := &fakeDurationProber{}
-	catalog := domain.NewFilesystemVODCatalog(os.DirFS(t.TempDir()), "/vod", prober)
+	root := t.TempDir()
+	catalog := newFilesystemVODCatalog(t, root, "/vod", prober)
 
 	for _, streamID := range []string{"", ".", "..", "../outside", "/absolute", `..\outside`} {
 		t.Run(streamID, func(t *testing.T) {
@@ -149,4 +194,85 @@ func TestVODCatalogRejectsPathTraversal(t *testing.T) {
 	if len(prober.paths) != 0 {
 		t.Fatalf("probed paths = %#v, want none", prober.paths)
 	}
+}
+
+func newFilesystemVODCatalog(t *testing.T, root, urlPrefix string, prober domain.DurationProber) *domain.FilesystemVODCatalog {
+	t.Helper()
+	catalog, err := domain.NewFilesystemVODCatalog(os.DirFS(root), root, urlPrefix, prober)
+	if err != nil {
+		t.Fatalf("NewFilesystemVODCatalog() error = %v", err)
+	}
+	return catalog
+}
+
+func TestFFprobeDurationProberRunsExpectedCommandAndRoundsMilliseconds(t *testing.T) {
+	prober := newHelperFFprobeProber(t, "success", "1.2346\n", "stream-1/sample.flv")
+
+	got, err := prober.ProbeMilliseconds(context.Background(), "stream-1/sample.flv")
+	if err != nil {
+		t.Fatalf("ProbeMilliseconds() error = %v", err)
+	}
+	if got != 1_235 {
+		t.Fatalf("ProbeMilliseconds() = %d, want 1235", got)
+	}
+}
+
+func TestFFprobeDurationProberReportsCommandFailureWithoutOutput(t *testing.T) {
+	prober := newHelperFFprobeProber(t, "failure", "", "stream-1/sample.flv")
+
+	_, err := prober.ProbeMilliseconds(context.Background(), "stream-1/sample.flv")
+	if err == nil {
+		t.Fatal("ProbeMilliseconds() error = nil, want command failure")
+	}
+	if strings.Contains(err.Error(), "sensitive ffprobe output") {
+		t.Fatalf("error leaks ffprobe output: %v", err)
+	}
+}
+
+func TestFFprobeDurationProberRejectsInvalidDurationOutput(t *testing.T) {
+	for _, output := range []string{"", "not-a-number", "NaN", "+Inf", "-Inf", "0", "-1", "1e100"} {
+		t.Run(output, func(t *testing.T) {
+			prober := newHelperFFprobeProber(t, "success", output, "stream-1/sample.flv")
+
+			if _, err := prober.ProbeMilliseconds(context.Background(), "stream-1/sample.flv"); err == nil {
+				t.Fatalf("ProbeMilliseconds() error = nil for output %q", output)
+			}
+		})
+	}
+}
+
+func TestFFprobeDurationProberHonorsCanceledContext(t *testing.T) {
+	prober := newHelperFFprobeProber(t, "sleep", "", "stream-1/sample.flv")
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	started := time.Now()
+	if _, err := prober.ProbeMilliseconds(ctx, "stream-1/sample.flv"); err == nil {
+		t.Fatal("ProbeMilliseconds() error = nil, want context cancellation")
+	}
+	if elapsed := time.Since(started); elapsed > time.Second {
+		t.Fatalf("ProbeMilliseconds() took %v with canceled context", elapsed)
+	}
+}
+
+func TestFFprobeDurationProberTreatsLeadingDashFilenameAsAPath(t *testing.T) {
+	sourcePath := filepath.Join(t.TempDir(), "-sample.flv")
+	prober := newHelperFFprobeProber(t, "success", "1\n", sourcePath)
+
+	if _, err := prober.ProbeMilliseconds(context.Background(), sourcePath); err != nil {
+		t.Fatalf("ProbeMilliseconds() error = %v", err)
+	}
+}
+
+func newHelperFFprobeProber(t *testing.T, mode, output, sourcePath string) *domain.FFprobeDurationProber {
+	t.Helper()
+	executable, err := os.Executable()
+	if err != nil {
+		t.Fatalf("find test executable: %v", err)
+	}
+	t.Setenv(helperEnabled, "1")
+	t.Setenv(helperMode, mode)
+	t.Setenv(helperOutput, output)
+	t.Setenv(helperSource, sourcePath)
+	return domain.NewFFprobeDurationProber(executable)
 }
