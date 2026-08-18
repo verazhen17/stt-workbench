@@ -12,6 +12,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/17media/stt-workbench/backend/models"
 )
 
 var (
@@ -66,7 +68,7 @@ func (prober *FFprobeDurationProber) ProbeMilliseconds(ctx context.Context, sour
 }
 
 type VODCatalog interface {
-	List(context.Context, string) ([]VOD, error)
+	List(context.Context, string) ([]models.VOD, error)
 }
 
 type FilesystemVODCatalog struct {
@@ -91,7 +93,7 @@ func NewFilesystemVODCatalog(filesystem ReadFS, sourceRoot, urlPrefix string, pr
 	}, nil
 }
 
-func (catalog *FilesystemVODCatalog) List(ctx context.Context, streamID string) ([]VOD, error) {
+func (catalog *FilesystemVODCatalog) List(ctx context.Context, streamID string) ([]models.VOD, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -108,7 +110,7 @@ func (catalog *FilesystemVODCatalog) List(ctx context.Context, streamID string) 
 	}
 
 	type discoveredVOD struct {
-		vod      VOD
+		vod      models.VOD
 		filename string
 	}
 	discovered := make([]discoveredVOD, 0, len(entries))
@@ -137,7 +139,7 @@ func (catalog *FilesystemVODCatalog) List(ctx context.Context, streamID string) 
 		return discovered[left].filename < discovered[right].filename
 	})
 
-	vods := make([]VOD, 0, len(discovered))
+	vods := make([]models.VOD, 0, len(discovered))
 	var timelineMS int64
 	for _, item := range discovered {
 		sourcePath, err := catalog.resolveSourcePath(streamID, item.filename)
@@ -174,22 +176,22 @@ func (catalog *FilesystemVODCatalog) resolveSourcePath(streamID, filename string
 	return sourcePath, nil
 }
 
-func parseVODFilename(filename string) (VOD, error) {
+func parseVODFilename(filename string) (models.VOD, error) {
 	name := strings.TrimSuffix(filename, ".flv")
 	parts := strings.SplitN(name, "_", 3)
 	if len(parts) != 3 || parts[2] == "" || !decimalDigits(parts[0]) || !decimalDigits(parts[1]) {
-		return VOD{}, fmt.Errorf("invalid VOD filename %q", filename)
+		return models.VOD{}, fmt.Errorf("invalid VOD filename %q", filename)
 	}
 
 	startTime, err := strconv.ParseInt(parts[0], 10, 64)
 	if err != nil {
-		return VOD{}, fmt.Errorf("invalid VOD start time in %q: %w", filename, err)
+		return models.VOD{}, fmt.Errorf("invalid VOD start time in %q: %w", filename, err)
 	}
 	sequence, err := strconv.Atoi(parts[1])
 	if err != nil {
-		return VOD{}, fmt.Errorf("invalid VOD sequence in %q: %w", filename, err)
+		return models.VOD{}, fmt.Errorf("invalid VOD sequence in %q: %w", filename, err)
 	}
-	return VOD{
+	return models.VOD{
 		FileID:         parts[0] + "_" + parts[1],
 		Sequence:       sequence,
 		StartTimeUnixS: startTime,

@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/17media/stt-workbench/backend/domain"
+	"github.com/17media/stt-workbench/backend/models"
 )
 
 func TestStreamCatalogListsOnlyFirstLevelDirectoriesSorted(t *testing.T) {
@@ -26,7 +27,7 @@ func TestStreamCatalogListsOnlyFirstLevelDirectoriesSorted(t *testing.T) {
 	if err != nil {
 		t.Fatalf("List() error = %v", err)
 	}
-	want := []domain.Stream{{StreamID: "stream-a"}, {StreamID: "stream-z"}}
+	want := []models.Stream{{StreamID: "stream-a"}, {StreamID: "stream-z"}}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("List() = %#v, want %#v", got, want)
 	}

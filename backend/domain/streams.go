@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"io/fs"
 	"sort"
+
+	"github.com/17media/stt-workbench/backend/models"
 )
 
 type FilesystemStreamCatalog struct {
@@ -17,7 +19,7 @@ func NewFilesystemStreamCatalog(filesystem ReadFS) *FilesystemStreamCatalog {
 	return &FilesystemStreamCatalog{filesystem: filesystem}
 }
 
-func (catalog *FilesystemStreamCatalog) List(ctx context.Context) ([]Stream, error) {
+func (catalog *FilesystemStreamCatalog) List(ctx context.Context) ([]models.Stream, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -27,10 +29,10 @@ func (catalog *FilesystemStreamCatalog) List(ctx context.Context) ([]Stream, err
 		return nil, fmt.Errorf("read VOD root: %w", err)
 	}
 
-	streams := make([]Stream, 0, len(entries))
+	streams := make([]models.Stream, 0, len(entries))
 	for _, entry := range entries {
 		if entry.IsDir() {
-			streams = append(streams, Stream{StreamID: entry.Name()})
+			streams = append(streams, models.Stream{StreamID: entry.Name()})
 		}
 	}
 	sort.Slice(streams, func(left, right int) bool {
@@ -44,5 +46,5 @@ type ReadFS interface {
 }
 
 type StreamCatalog interface {
-	List(context.Context) ([]Stream, error)
+	List(context.Context) ([]models.Stream, error)
 }

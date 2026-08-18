@@ -1,18 +1,18 @@
-package domain_test
+package models_test
 
 import (
 	"encoding/json"
 	"testing"
 
-	"github.com/17media/stt-workbench/backend/domain"
+	"github.com/17media/stt-workbench/backend/models"
 )
 
 func TestSTTRunJSONUsesNestedModelParamsWithoutVersion(t *testing.T) {
-	run := domain.STTRun{
+	run := models.STTRun{
 		StreamID: "stream-1",
-		STTRunMetadata: domain.STTRunMetadata{
+		STTRunMetadata: models.STTRunMetadata{
 			RunID: "run-1",
-			Model: domain.Model{
+			Model: models.Model{
 				Name:   "whisper",
 				Params: map[string]any{"temperature": 0.2},
 			},
@@ -31,7 +31,7 @@ func TestSTTRunJSONUsesNestedModelParamsWithoutVersion(t *testing.T) {
 }
 
 func TestGoldenJSONHasNoVersion(t *testing.T) {
-	document := marshalObject(t, domain.Golden{StreamID: "stream-1"})
+	document := marshalObject(t, models.Golden{StreamID: "stream-1"})
 	assertNoKey(t, document, "schema_version")
 }
 

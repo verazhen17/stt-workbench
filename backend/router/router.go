@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/17media/stt-workbench/backend/domain"
+	"github.com/17media/stt-workbench/backend/models"
 	"github.com/gin-gonic/gin"
 )
 
@@ -30,7 +31,7 @@ type streamHandler struct {
 }
 
 type streamsResponse struct {
-	Streams []domain.Stream `json:"streams"`
+	Streams []models.Stream `json:"streams"`
 }
 
 func NewRouter(dependencies Dependencies) *gin.Engine {
@@ -91,7 +92,7 @@ func (handler streamHandler) list(context *gin.Context) {
 		return
 	}
 	if streams == nil {
-		streams = []domain.Stream{}
+		streams = []models.Stream{}
 	}
 	context.JSON(http.StatusOK, streamsResponse{Streams: streams})
 }

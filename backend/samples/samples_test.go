@@ -1,4 +1,4 @@
-package domain_test
+package samples_test
 
 import (
 	"encoding/json"
@@ -35,7 +35,7 @@ func samplesRoot(t *testing.T) string {
 	if !ok {
 		t.Fatal("locate samples test source")
 	}
-	return filepath.Join(filepath.Dir(filename), "..", "testdata", "samples")
+	return filepath.Dir(filename)
 }
 
 func TestSamples(t *testing.T) {

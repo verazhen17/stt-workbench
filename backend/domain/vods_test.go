@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/17media/stt-workbench/backend/domain"
+	"github.com/17media/stt-workbench/backend/models"
 )
 
 const (
@@ -100,7 +101,7 @@ func TestVODCatalogDiscoversSortedVODsWithCumulativeTimeline(t *testing.T) {
 	if err != nil {
 		t.Fatalf("List() error = %v", err)
 	}
-	want := []domain.VOD{
+	want := []models.VOD{
 		{FileID: "1780967564_001", URL: "/vod/214744545/1780967564_001_first.flv", Sequence: 1, StartTimeUnixS: 1780967564, DurationMS: 1_000, TimelineStart: 0, TimelineEnd: 1_000},
 		{FileID: "1780967564_002", URL: "/vod/214744545/1780967564_002_second.flv", Sequence: 2, StartTimeUnixS: 1780967564, DurationMS: 2_500, TimelineStart: 1_000, TimelineEnd: 3_500},
 		{FileID: "1780974764_010", URL: "/vod/214744545/1780974764_010_later.flv", Sequence: 10, StartTimeUnixS: 1780974764, DurationMS: 3_000, TimelineStart: 3_500, TimelineEnd: 6_500},
