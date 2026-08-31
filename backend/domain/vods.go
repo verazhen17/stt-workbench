@@ -68,7 +68,7 @@ func (prober *FFprobeDurationProber) ProbeMilliseconds(ctx context.Context, sour
 }
 
 type VODCatalog interface {
-	List(context.Context, string) ([]models.VOD, error)
+	List(context.Context, string) ([]models.VODSegment, error)
 }
 
 type FilesystemVODCatalog struct {
@@ -93,7 +93,7 @@ func NewFilesystemVODCatalog(filesystem ReadFS, sourceRoot, urlPrefix string, pr
 	}, nil
 }
 
-func (catalog *FilesystemVODCatalog) List(ctx context.Context, streamID string) ([]models.VOD, error) {
+func (catalog *FilesystemVODCatalog) List(ctx context.Context, streamID string) ([]models.VODSegment, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -110,7 +110,7 @@ func (catalog *FilesystemVODCatalog) List(ctx context.Context, streamID string) 
 	}
 
 	type discoveredVOD struct {
-		vod      models.VOD
+		vod      models.VODSegment
 		filename string
 	}
 	discovered := make([]discoveredVOD, 0, len(entries))
@@ -130,8 +130,8 @@ func (catalog *FilesystemVODCatalog) List(ctx context.Context, streamID string) 
 	}
 
 	sort.Slice(discovered, func(left, right int) bool {
-		if discovered[left].vod.StartTimeUnixS != discovered[right].vod.StartTimeUnixS {
-			return discovered[left].vod.StartTimeUnixS < discovered[right].vod.StartTimeUnixS
+		if discovered[left].vod.StartTimeUnix != discovered[right].vod.StartTimeUnix {
+			return discovered[left].vod.StartTimeUnix < discovered[right].vod.StartTimeUnix
 		}
 		if discovered[left].vod.Sequence != discovered[right].vod.Sequence {
 			return discovered[left].vod.Sequence < discovered[right].vod.Sequence
@@ -139,7 +139,7 @@ func (catalog *FilesystemVODCatalog) List(ctx context.Context, streamID string) 
 		return discovered[left].filename < discovered[right].filename
 	})
 
-	vods := make([]models.VOD, 0, len(discovered))
+	vods := make([]models.VODSegment, 0, len(discovered))
 	var timelineMS int64
 	for _, item := range discovered {
 		sourcePath, err := catalog.resolveSourcePath(streamID, item.filename)
@@ -154,7 +154,7 @@ func (catalog *FilesystemVODCatalog) List(ctx context.Context, streamID string) 
 			return nil, fmt.Errorf("%w: probe %q returned negative duration", ErrVODIngestionFailed, sourcePath)
 		}
 
-		item.vod.URL = catalog.urlPrefix + "/" + url.PathEscape(streamID) + "/" + url.PathEscape(item.filename)
+		item.vod.FLVURL = catalog.urlPrefix + "/" + url.PathEscape(streamID) + "/" + url.PathEscape(item.filename)
 		item.vod.DurationMS = durationMS
 		item.vod.TimelineStart = timelineMS
 		timelineMS += durationMS
@@ -176,25 +176,26 @@ func (catalog *FilesystemVODCatalog) resolveSourcePath(streamID, filename string
 	return sourcePath, nil
 }
 
-func parseVODFilename(filename string) (models.VOD, error) {
+func parseVODFilename(filename string) (models.VODSegment, error) {
 	name := strings.TrimSuffix(filename, ".flv")
 	parts := strings.SplitN(name, "_", 3)
 	if len(parts) != 3 || parts[2] == "" || !decimalDigits(parts[0]) || !decimalDigits(parts[1]) {
-		return models.VOD{}, fmt.Errorf("invalid VOD filename %q", filename)
+		return models.VODSegment{}, fmt.Errorf("invalid VOD filename %q", filename)
 	}
 
 	startTime, err := strconv.ParseInt(parts[0], 10, 64)
 	if err != nil {
-		return models.VOD{}, fmt.Errorf("invalid VOD start time in %q: %w", filename, err)
+		return models.VODSegment{}, fmt.Errorf("invalid VOD start time in %q: %w", filename, err)
 	}
 	sequence, err := strconv.Atoi(parts[1])
 	if err != nil {
-		return models.VOD{}, fmt.Errorf("invalid VOD sequence in %q: %w", filename, err)
+		return models.VODSegment{}, fmt.Errorf("invalid VOD sequence in %q: %w", filename, err)
 	}
-	return models.VOD{
-		FileID:         parts[0] + "_" + parts[1],
-		Sequence:       sequence,
-		StartTimeUnixS: startTime,
+	return models.VODSegment{
+		VODID:         parts[0] + "_" + parts[1],
+		FileID:        parts[0] + "_" + parts[1],
+		Sequence:      sequence,
+		StartTimeUnix: startTime,
 	}, nil
 }
 

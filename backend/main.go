@@ -22,7 +22,7 @@ func main() {
 
 func run(logger *slog.Logger) error {
 	settings := router.LoadConfig()
-	streamCatalog := domain.NewFilesystemStreamCatalog(os.DirFS(settings.VODRoot))
+	streamCatalog := domain.NewFilesystemStreamCatalog(os.DirFS(settings.SamplesRoot))
 	engine := router.NewRouter(router.Dependencies{
 		Streams: streamCatalog,
 		Logger:  logger,

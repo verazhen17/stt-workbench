@@ -9,8 +9,7 @@ import (
 func TestLoadDefaults(t *testing.T) {
 	for _, key := range []string{
 		"HTTP_ADDR",
-		"VOD_ROOT",
-		"STT_ROOT",
+		"SAMPLES_ROOT",
 		"GOLDEN_ROOT",
 		"VOD_URL_PREFIX",
 		"FFPROBE_PATH",
@@ -21,8 +20,7 @@ func TestLoadDefaults(t *testing.T) {
 	got := router.LoadConfig()
 	want := router.Config{
 		HTTPAddr:     ":8080",
-		VODRoot:      "/app/data/vod",
-		STTRoot:      "/app/data/stt",
+		SamplesRoot:  "/app/data/samples",
 		GoldenRoot:   "/app/data/golden",
 		VODURLPrefix: "/vod",
 		FFprobePath:  "/usr/bin/ffprobe",
@@ -31,11 +29,9 @@ func TestLoadDefaults(t *testing.T) {
 		t.Fatalf("Load() = %#v, want %#v", got, want)
 	}
 }
-
 func TestLoadOverrides(t *testing.T) {
 	t.Setenv("HTTP_ADDR", "127.0.0.1:9090")
-	t.Setenv("VOD_ROOT", "/tmp/vod")
-	t.Setenv("STT_ROOT", "/tmp/stt")
+	t.Setenv("SAMPLES_ROOT", "/tmp/samples")
 	t.Setenv("GOLDEN_ROOT", "/tmp/golden")
 	t.Setenv("VOD_URL_PREFIX", "/media")
 	t.Setenv("FFPROBE_PATH", "/opt/bin/ffprobe")
@@ -43,8 +39,7 @@ func TestLoadOverrides(t *testing.T) {
 	got := router.LoadConfig()
 	want := router.Config{
 		HTTPAddr:     "127.0.0.1:9090",
-		VODRoot:      "/tmp/vod",
-		STTRoot:      "/tmp/stt",
+		SamplesRoot:  "/tmp/samples",
 		GoldenRoot:   "/tmp/golden",
 		VODURLPrefix: "/media",
 		FFprobePath:  "/opt/bin/ffprobe",

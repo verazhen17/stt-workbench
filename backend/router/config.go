@@ -4,8 +4,7 @@ import "os"
 
 const (
 	defaultHTTPAddr     = ":8080"
-	defaultVODRoot      = "/app/data/vod"
-	defaultSTTRoot      = "/app/data/stt"
+	defaultSamplesRoot  = "/app/data/samples"
 	defaultGoldenRoot   = "/app/data/golden"
 	defaultVODURLPrefix = "/vod"
 	defaultFFprobePath  = "/usr/bin/ffprobe"
@@ -13,18 +12,15 @@ const (
 
 type Config struct {
 	HTTPAddr     string
-	VODRoot      string
-	STTRoot      string
+	SamplesRoot  string
 	GoldenRoot   string
 	VODURLPrefix string
 	FFprobePath  string
 }
-
 func LoadConfig() Config {
 	return Config{
 		HTTPAddr:     valueOrDefault("HTTP_ADDR", defaultHTTPAddr),
-		VODRoot:      valueOrDefault("VOD_ROOT", defaultVODRoot),
-		STTRoot:      valueOrDefault("STT_ROOT", defaultSTTRoot),
+		SamplesRoot:  valueOrDefault("SAMPLES_ROOT", defaultSamplesRoot),
 		GoldenRoot:   valueOrDefault("GOLDEN_ROOT", defaultGoldenRoot),
 		VODURLPrefix: valueOrDefault("VOD_URL_PREFIX", defaultVODURLPrefix),
 		FFprobePath:  valueOrDefault("FFPROBE_PATH", defaultFFprobePath),

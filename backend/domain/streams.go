@@ -31,7 +31,7 @@ func (catalog *FilesystemStreamCatalog) List(ctx context.Context) ([]models.Stre
 
 	streams := make([]models.Stream, 0, len(entries))
 	for _, entry := range entries {
-		if entry.IsDir() {
+		if entry.IsDir() && entry.Name() != "presets" {
 			streams = append(streams, models.Stream{StreamID: entry.Name()})
 		}
 	}

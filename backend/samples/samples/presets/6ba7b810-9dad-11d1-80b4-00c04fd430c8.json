@@ -1,0 +1,16 @@
+{
+  "preset_id": "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
+  "model": {
+    "name": "whisper-medium",
+    "params": {
+      "temperature": 0.2,
+      "beam_size": 1,
+      "vad_filter": false
+    }
+  },
+  "created_at": "2026-08-17T06:00:00Z",
+  "updated_at": "2026-08-17T06:00:00Z",
+  "stream_ids": [
+    "214744544"
+  ]
+}

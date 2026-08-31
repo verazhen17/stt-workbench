@@ -9,12 +9,23 @@ import (
 )
 
 type sttSample struct {
-	RunID    string      `json:"run_id"`
-	Model    sampleModel `json:"model"`
-	Segments []struct {
-		StartMS int64 `json:"start_ms"`
-		EndMS   int64 `json:"end_ms"`
+	PresetID  string `json:"preset_id"`
+	StreamID  string `json:"stream_id"`
+	VODID     string `json:"vod_id"`
+	CreatedAt string `json:"created_at"`
+	Segments  []struct {
+		StartMS int64  `json:"start_ms"`
+		EndMS   int64  `json:"end_ms"`
+		Text    string `json:"text"`
 	} `json:"segments"`
+}
+
+type presetSample struct {
+	PresetID  string      `json:"preset_id"`
+	Model     sampleModel `json:"model"`
+	CreatedAt string      `json:"created_at"`
+	UpdatedAt string      `json:"updated_at"`
+	StreamIDs []string    `json:"stream_ids"`
 }
 
 type sampleModel struct {
@@ -23,8 +34,11 @@ type sampleModel struct {
 }
 
 type goldenSample struct {
-	GoldenID string `json:"golden_id"`
-	Segments []struct {
+	StreamID     string `json:"stream_id"`
+	VODID        string `json:"vod_id"`
+	BasePresetID string `json:"base_preset_id"`
+	UpdatedAt    string `json:"updated_at"`
+	Segments     []struct {
 		SegmentID string `json:"segment_id"`
 	} `json:"segments"`
 }
@@ -40,30 +54,49 @@ func samplesRoot(t *testing.T) string {
 
 func TestSamples(t *testing.T) {
 	root := samplesRoot(t)
+	dataRoot := filepath.Join(root, "samples")
 
 	t.Run("single and multiple FLV streams", func(t *testing.T) {
-		assertFLVCount(t, filepath.Join(root, "vod", "214744544"), 1)
-		assertFLVCount(t, filepath.Join(root, "vod", "214744545"), 2)
+		assertFLVCount(t, filepath.Join(dataRoot, "214744544"), 1)
+		assertFLVCount(t, filepath.Join(dataRoot, "214744545"), 2)
 	})
 
-	t.Run("two selectable STT runs", func(t *testing.T) {
-		for _, name := range []string{"run-a.json", "run-b.json"} {
-			path := filepath.Join(root, "stt", "214744544", name)
+	t.Run("preset manifests", func(t *testing.T) {
+		for _, name := range []string{
+			"550e8400-e29b-41d4-a716-446655440000.json",
+			"6ba7b810-9dad-11d1-80b4-00c04fd430c8.json",
+		} {
+			path := filepath.Join(dataRoot, "presets", name)
+			assertNoVersionOrTopLevelParams(t, path)
+			var sample presetSample
+			readJSON(t, path, &sample)
+			if sample.PresetID == "" || sample.Model.Name == "" || sample.Model.Params == nil || len(sample.StreamIDs) == 0 {
+				t.Fatalf("%s is not a valid preset manifest", name)
+			}
+		}
+	})
+
+	t.Run("per-VOD STT results", func(t *testing.T) {
+		for _, name := range []string{
+			"1780967564_000_550e8400-e29b-41d4-a716-446655440000.json",
+			"1780967564_000_6ba7b810-9dad-11d1-80b4-00c04fd430c8.json",
+		} {
+			path := filepath.Join(dataRoot, "214744544", name)
 			assertNoVersionOrTopLevelParams(t, path)
 			var sample sttSample
 			readJSON(t, path, &sample)
-			if sample.RunID == "" || sample.Model.Name == "" || sample.Model.Params == nil || len(sample.Segments) == 0 {
+			if sample.PresetID == "" || sample.StreamID == "" || sample.VODID == "" || sample.CreatedAt == "" || len(sample.Segments) == 0 {
 				t.Fatalf("%s is not a selectable STT sample", name)
 			}
 		}
 	})
 
 	t.Run("invalid segment remains selectable", func(t *testing.T) {
-		path := filepath.Join(root, "stt", "214744544", "invalid-segments.json")
+		path := filepath.Join(dataRoot, "214744544", "1780967564_000_6ba7b810-9dad-11d1-80b4-00c04fd430c8.json")
 		assertNoVersionOrTopLevelParams(t, path)
 		var sample sttSample
 		readJSON(t, path, &sample)
-		if sample.RunID == "" || sample.Model.Name == "" || sample.Model.Params == nil {
+		if sample.PresetID == "" || sample.StreamID == "" {
 			t.Fatal("invalid segment sample must retain selectable identity")
 		}
 		if len(sample.Segments) != 1 || sample.Segments[0].EndMS > sample.Segments[0].StartMS {
@@ -72,11 +105,11 @@ func TestSamples(t *testing.T) {
 	})
 
 	t.Run("saved Golden", func(t *testing.T) {
-		path := filepath.Join(root, "golden", "214744544", "current.json")
+		path := filepath.Join(root, "golden", "214744544", "1780967564_000.json")
 		assertNoVersion(t, path)
 		var sample goldenSample
 		readJSON(t, path, &sample)
-		if sample.GoldenID == "" || len(sample.Segments) == 0 || sample.Segments[0].SegmentID == "" {
+		if sample.StreamID == "" || sample.VODID == "" || sample.BasePresetID == "" || sample.UpdatedAt == "" || len(sample.Segments) == 0 || sample.Segments[0].SegmentID == "" {
 			t.Fatal("saved Golden sample must contain stable identities")
 		}
 	})
