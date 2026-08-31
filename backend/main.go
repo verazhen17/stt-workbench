@@ -27,7 +27,8 @@ func run(logger *slog.Logger) error {
 	presetCatalog := domain.NewFilesystemPresetCatalog(samplesFilesystem)
 	resultCatalog := domain.NewFilesystemResultCatalog(samplesFilesystem)
 	selectableResults := domain.NewSelectableResultCatalog(presetCatalog, resultCatalog)
-	goldenCatalog := domain.NewFilesystemGoldenCatalog(os.DirFS(settings.GoldenRoot))
+	goldenStore := domain.NewFilesystemGoldenStore(os.DirFS(settings.GoldenRoot), settings.GoldenRoot)
+	goldenService := domain.NewGoldenService(goldenStore, selectableResults)
 	vodCatalog, err := domain.NewFilesystemVODCatalog(
 		samplesFilesystem,
 		settings.SamplesRoot,
@@ -43,7 +44,8 @@ func run(logger *slog.Logger) error {
 		VODs:           vodCatalog,
 		Results:        selectableResults,
 		ResultProvider: selectableResults,
-		Golden:         goldenCatalog,
+		Golden:         goldenStore,
+		GoldenManager:  goldenService,
 		Logger:         logger,
 	})
 

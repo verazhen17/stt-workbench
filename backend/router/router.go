@@ -23,6 +23,7 @@ type Dependencies struct {
 	Results        domain.SelectableResultLister
 	ResultProvider domain.SelectableResultProvider
 	Golden         domain.GoldenReader
+	GoldenManager  domain.GoldenManager
 	Logger         *slog.Logger
 }
 
@@ -32,13 +33,14 @@ type Server struct {
 }
 
 type streamHandler struct {
-	streams  domain.StreamCatalog
-	presets  domain.PresetCatalog
-	vods     domain.VODCatalog
-	results  domain.SelectableResultLister
-	provider domain.SelectableResultProvider
-	golden   domain.GoldenReader
-	logger   *slog.Logger
+	streams       domain.StreamCatalog
+	presets       domain.PresetCatalog
+	vods          domain.VODCatalog
+	results       domain.SelectableResultLister
+	provider      domain.SelectableResultProvider
+	golden        domain.GoldenReader
+	goldenManager domain.GoldenManager
+	logger        *slog.Logger
 }
 
 type streamsResponse struct {
@@ -55,18 +57,20 @@ func NewRouter(dependencies Dependencies) *gin.Engine {
 	router.Use(requestLogger(dependencies.Logger), recovery(dependencies.Logger))
 
 	handler := streamHandler{
-		streams:  dependencies.Streams,
-		presets:  dependencies.Presets,
-		vods:     dependencies.VODs,
-		results:  dependencies.Results,
-		provider: dependencies.ResultProvider,
-		golden:   dependencies.Golden,
-		logger:   dependencies.Logger,
+		streams:       dependencies.Streams,
+		presets:       dependencies.Presets,
+		vods:          dependencies.VODs,
+		results:       dependencies.Results,
+		provider:      dependencies.ResultProvider,
+		golden:        dependencies.Golden,
+		goldenManager: dependencies.GoldenManager,
+		logger:        dependencies.Logger,
 	}
 	router.GET("/api/presets", handler.listPresets)
 	router.GET("/api/streams", handler.list)
 	router.GET("/api/streams/:stream_id", handler.detail)
 	router.GET("/api/streams/:stream_id/align", handler.align)
+	router.PUT("/api/streams/:stream_id/golden", handler.saveGolden)
 	return router
 }
 
@@ -273,6 +277,41 @@ func parsePresetIDs(value string) ([]string, bool) {
 	return ids, true
 }
 
+func (handler streamHandler) saveGolden(context *gin.Context) {
+	var request models.GoldenRequest
+	if err := context.ShouldBindJSON(&request); err != nil {
+		writeError(context, http.StatusBadRequest, "invalid_request", "Request body is invalid.", nil)
+		return
+	}
+	if request.VODID == "" {
+		writeError(context, http.StatusBadRequest, "invalid_request", "vod_id is required.", nil)
+		return
+	}
+
+	var (
+		golden models.Golden
+		err    error
+	)
+	switch request.Mode {
+	case "renew":
+		if !domain.IsValidUUID(request.SourcePresetID) {
+			writeError(context, http.StatusBadRequest, "invalid_request", "source_preset_id must be a UUID.", nil)
+			return
+		}
+		golden, err = handler.goldenManager.Renew(context.Request.Context(), context.Param("stream_id"), request.VODID, request.SourcePresetID)
+	case "edit":
+		golden, err = handler.goldenManager.Edit(context.Request.Context(), context.Param("stream_id"), request.VODID, request.Segments)
+	default:
+		writeError(context, http.StatusBadRequest, "invalid_request", "mode must be renew or edit.", nil)
+		return
+	}
+	if err != nil {
+		handler.writeCatalogError(context, err, "save Golden")
+		return
+	}
+	context.JSON(http.StatusOK, golden)
+}
+
 func (handler streamHandler) writeCatalogError(context *gin.Context, err error, operation string) {
 	handler.logger.Error(operation, "error", err)
 	switch {
@@ -293,7 +332,7 @@ func (handler streamHandler) writeCatalogError(context *gin.Context, err error, 
 	case errors.Is(err, domain.ErrGoldenNotFound):
 		writeError(context, http.StatusNotFound, "golden_not_found", "The requested Golden was not found.", nil)
 	case errors.Is(err, domain.ErrGoldenInvalid):
-		writeError(context, http.StatusInternalServerError, "internal_error", "An internal error occurred.", nil)
+		writeError(context, http.StatusUnprocessableEntity, "golden_validation_failed", "Golden segments are invalid.", nil)
 	default:
 		writeError(context, http.StatusInternalServerError, "internal_error", "An internal error occurred.", nil)
 	}

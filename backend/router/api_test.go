@@ -1,6 +1,7 @@
 package router_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -77,6 +78,22 @@ func (provider fakeSelectableResultProvider) Get(_ context.Context, _, _, preset
 type fakeGoldenReader struct {
 	golden models.Golden
 	err    error
+}
+
+type fakeGoldenManager struct {
+	golden models.Golden
+	err    error
+	mode   string
+}
+
+func (manager *fakeGoldenManager) Renew(context.Context, string, string, string) (models.Golden, error) {
+	manager.mode = "renew"
+	return manager.golden, manager.err
+}
+
+func (manager *fakeGoldenManager) Edit(context.Context, string, string, []models.GoldenEditSegment) (models.Golden, error) {
+	manager.mode = "edit"
+	return manager.golden, manager.err
 }
 
 func (reader fakeGoldenReader) Get(context.Context, string, string) (models.Golden, error) {
@@ -280,6 +297,50 @@ func TestGetAlignmentRequiresVODAndPresetIDs(t *testing.T) {
 		if response.Code != http.StatusBadRequest {
 			t.Fatalf("query %q status = %d, want %d", query, response.Code, http.StatusBadRequest)
 		}
+	}
+}
+
+func TestSaveGoldenRenewsFromPreset(t *testing.T) {
+	manager := &fakeGoldenManager{golden: models.Golden{StreamID: testStreamID, VODID: testVODID, BasePresetID: testPresetID}}
+	engine := router.NewRouter(router.Dependencies{GoldenManager: manager, Logger: discardLogger()})
+
+	response := httptest.NewRecorder()
+	body := bytes.NewBufferString(`{"vod_id":"` + testVODID + `","mode":"renew","source_preset_id":"` + testPresetID + `"}`)
+	engine.ServeHTTP(response, httptest.NewRequest(http.MethodPut, "/api/streams/"+testStreamID+"/golden", body))
+
+	if response.Code != http.StatusOK || manager.mode != "renew" {
+		t.Fatalf("status = %d, mode = %q, want 200 and renew", response.Code, manager.mode)
+	}
+	var got models.Golden
+	if err := json.Unmarshal(response.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if got.VODID != testVODID || got.BasePresetID != testPresetID {
+		t.Fatalf("Golden = %#v, want renewed Golden", got)
+	}
+}
+
+func TestSaveGoldenEditsAndMapsValidationFailure(t *testing.T) {
+	manager := &fakeGoldenManager{err: domain.ErrGoldenInvalid}
+	engine := router.NewRouter(router.Dependencies{GoldenManager: manager, Logger: discardLogger()})
+
+	response := httptest.NewRecorder()
+	body := bytes.NewBufferString(`{"vod_id":"` + testVODID + `","mode":"edit","segments":[{"start_ms":0,"end_ms":1000,"text":"hello"}]}`)
+	engine.ServeHTTP(response, httptest.NewRequest(http.MethodPut, "/api/streams/"+testStreamID+"/golden", body))
+
+	if response.Code != http.StatusUnprocessableEntity || manager.mode != "edit" {
+		t.Fatalf("status = %d, mode = %q, want 422 and edit", response.Code, manager.mode)
+	}
+}
+
+func TestSaveGoldenRejectsInvalidMode(t *testing.T) {
+	manager := &fakeGoldenManager{}
+	engine := router.NewRouter(router.Dependencies{GoldenManager: manager, Logger: discardLogger()})
+	response := httptest.NewRecorder()
+	body := bytes.NewBufferString(`{"vod_id":"` + testVODID + `","mode":"unknown"}`)
+	engine.ServeHTTP(response, httptest.NewRequest(http.MethodPut, "/api/streams/"+testStreamID+"/golden", body))
+	if response.Code != http.StatusBadRequest || manager.mode != "" {
+		t.Fatalf("status = %d, mode = %q, want 400 without manager call", response.Code, manager.mode)
 	}
 }
 
