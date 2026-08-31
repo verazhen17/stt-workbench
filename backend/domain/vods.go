@@ -155,6 +155,14 @@ func (catalog *FilesystemVODCatalog) List(ctx context.Context, streamID string) 
 		}
 
 		item.vod.FLVURL = catalog.urlPrefix + "/" + url.PathEscape(streamID) + "/" + url.PathEscape(item.filename)
+		wavFilename := strings.TrimSuffix(item.filename, ".flv") + ".wav"
+		if _, err := fs.Stat(catalog.filesystem, filepath.Join(streamID, wavFilename)); err != nil {
+			if errors.Is(err, fs.ErrNotExist) {
+				return nil, fmt.Errorf("%w: missing WAV for %q", ErrVODIngestionFailed, item.filename)
+			}
+			return nil, fmt.Errorf("%w: inspect WAV for %q: %v", ErrVODIngestionFailed, item.filename, err)
+		}
+		item.vod.WAVURL = catalog.urlPrefix + "/" + url.PathEscape(streamID) + "/" + url.PathEscape(wavFilename)
 		item.vod.DurationMS = durationMS
 		item.vod.TimelineStart = timelineMS
 		timelineMS += durationMS

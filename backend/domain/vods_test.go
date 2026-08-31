@@ -85,6 +85,12 @@ func TestVODCatalogDiscoversSortedVODsWithCumulativeTimeline(t *testing.T) {
 		if err := os.WriteFile(filepath.Join(streamDirectory, name), []byte("sample"), 0o644); err != nil {
 			t.Fatalf("create sample file: %v", err)
 		}
+		if strings.HasSuffix(name, ".flv") {
+			wavName := strings.TrimSuffix(name, ".flv") + ".wav"
+			if err := os.WriteFile(filepath.Join(streamDirectory, wavName), []byte("sample"), 0o644); err != nil {
+				t.Fatalf("create sample WAV: %v", err)
+			}
+		}
 	}
 	if err := os.Mkdir(filepath.Join(streamDirectory, "1780000000_000_nested.flv"), 0o755); err != nil {
 		t.Fatalf("create ignored subdirectory: %v", err)
@@ -102,9 +108,9 @@ func TestVODCatalogDiscoversSortedVODsWithCumulativeTimeline(t *testing.T) {
 		t.Fatalf("List() error = %v", err)
 	}
 	want := []models.VODSegment{
-		{VODID: "1780967564_001", FileID: "1780967564_001", FLVURL: "/vod/214744545/1780967564_001_first.flv", Sequence: 1, StartTimeUnix: 1780967564, DurationMS: 1_000, TimelineStart: 0, TimelineEnd: 1_000},
-		{VODID: "1780967564_002", FileID: "1780967564_002", FLVURL: "/vod/214744545/1780967564_002_second.flv", Sequence: 2, StartTimeUnix: 1780967564, DurationMS: 2_500, TimelineStart: 1_000, TimelineEnd: 3_500},
-		{VODID: "1780974764_010", FileID: "1780974764_010", FLVURL: "/vod/214744545/1780974764_010_later.flv", Sequence: 10, StartTimeUnix: 1780974764, DurationMS: 3_000, TimelineStart: 3_500, TimelineEnd: 6_500},
+		{VODID: "1780967564_001", FileID: "1780967564_001", FLVURL: "/vod/214744545/1780967564_001_first.flv", WAVURL: "/vod/214744545/1780967564_001_first.wav", Sequence: 1, StartTimeUnix: 1780967564, DurationMS: 1_000, TimelineStart: 0, TimelineEnd: 1_000},
+		{VODID: "1780967564_002", FileID: "1780967564_002", FLVURL: "/vod/214744545/1780967564_002_second.flv", WAVURL: "/vod/214744545/1780967564_002_second.wav", Sequence: 2, StartTimeUnix: 1780967564, DurationMS: 2_500, TimelineStart: 1_000, TimelineEnd: 3_500},
+		{VODID: "1780974764_010", FileID: "1780974764_010", FLVURL: "/vod/214744545/1780974764_010_later.flv", WAVURL: "/vod/214744545/1780974764_010_later.wav", Sequence: 10, StartTimeUnix: 1780974764, DurationMS: 3_000, TimelineStart: 3_500, TimelineEnd: 6_500},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("List() = %#v, want %#v", got, want)
@@ -172,6 +178,26 @@ func TestVODCatalogReportsProbeFailure(t *testing.T) {
 		t.Fatalf("create FLV: %v", err)
 	}
 	catalog := newFilesystemVODCatalog(t, root, "/vod", &fakeDurationProber{err: errors.New("probe failed")})
+
+	_, err := catalog.List(context.Background(), "stream-1")
+	if !errors.Is(err, domain.ErrVODIngestionFailed) {
+		t.Fatalf("List() error = %v, want ErrVODIngestionFailed", err)
+	}
+}
+
+func TestVODCatalogReportsMissingWAV(t *testing.T) {
+	root := t.TempDir()
+	streamDirectory := filepath.Join(root, "stream-1")
+	if err := os.Mkdir(streamDirectory, 0o755); err != nil {
+		t.Fatalf("create stream directory: %v", err)
+	}
+	filename := "1780967564_000_sample.flv"
+	if err := os.WriteFile(filepath.Join(streamDirectory, filename), []byte("sample"), 0o644); err != nil {
+		t.Fatalf("create FLV: %v", err)
+	}
+	catalog := newFilesystemVODCatalog(t, root, "/vod", &fakeDurationProber{
+		durations: map[string]int64{filepath.Join(root, "stream-1", filename): 1_000},
+	})
 
 	_, err := catalog.List(context.Background(), "stream-1")
 	if !errors.Is(err, domain.ErrVODIngestionFailed) {

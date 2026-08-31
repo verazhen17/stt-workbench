@@ -52,7 +52,7 @@ type STTSegment struct {
 type STTResult struct {
 	PresetID  string       `json:"preset_id"`
 	StreamID  string       `json:"stream_id"`
-	VODID     string       `json:"vod_id,omitempty"`
+	VODID     string       `json:"vod_id"`
 	CreatedAt time.Time    `json:"created_at"`
 	Segments  []STTSegment `json:"segments"`
 }
