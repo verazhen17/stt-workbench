@@ -150,3 +150,7 @@ func validUUID(value string) bool {
 	}
 	return len(compact) == 32
 }
+
+func IsValidUUID(value string) bool {
+	return validUUID(value)
+}

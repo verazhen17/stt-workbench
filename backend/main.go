@@ -22,9 +22,25 @@ func main() {
 
 func run(logger *slog.Logger) error {
 	settings := router.LoadConfig()
-	streamCatalog := domain.NewFilesystemStreamCatalog(os.DirFS(settings.SamplesRoot))
+	samplesFilesystem := os.DirFS(settings.SamplesRoot)
+	streamCatalog := domain.NewFilesystemStreamCatalog(samplesFilesystem)
+	presetCatalog := domain.NewFilesystemPresetCatalog(samplesFilesystem)
+	resultCatalog := domain.NewFilesystemResultCatalog(samplesFilesystem)
+	selectableResults := domain.NewSelectableResultCatalog(presetCatalog, resultCatalog)
+	vodCatalog, err := domain.NewFilesystemVODCatalog(
+		samplesFilesystem,
+		settings.SamplesRoot,
+		settings.VODURLPrefix,
+		domain.NewFFprobeDurationProber(settings.FFprobePath),
+	)
+	if err != nil {
+		return err
+	}
 	engine := router.NewRouter(router.Dependencies{
 		Streams: streamCatalog,
+		Presets: presetCatalog,
+		VODs:    vodCatalog,
+		Results: selectableResults,
 		Logger:  logger,
 	})
 

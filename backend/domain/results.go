@@ -22,6 +22,10 @@ type ResultCatalog interface {
 	Get(context.Context, string, string, string) (models.STTResult, error)
 }
 
+type SelectableResultLister interface {
+	List(context.Context, string, string) ([]models.STTResultSummary, error)
+}
+
 type FilesystemResultCatalog struct {
 	filesystem ReadFS
 }
