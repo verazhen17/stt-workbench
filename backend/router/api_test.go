@@ -56,6 +56,33 @@ type fakeSelectableResultLister struct {
 	err     error
 }
 
+type fakeSelectableResultProvider struct {
+	results map[string]models.STTResult
+	presets map[string]models.Preset
+}
+
+func (provider fakeSelectableResultProvider) List(context.Context, string, string) ([]models.STTResultSummary, error) {
+	return nil, nil
+}
+
+func (provider fakeSelectableResultProvider) Get(_ context.Context, _, _, presetID string) (models.STTResult, models.Preset, error) {
+	result, resultOK := provider.results[presetID]
+	preset, presetOK := provider.presets[presetID]
+	if !resultOK || !presetOK {
+		return models.STTResult{}, models.Preset{}, domain.ErrSTTResultNotFound
+	}
+	return result, preset, nil
+}
+
+type fakeGoldenReader struct {
+	golden models.Golden
+	err    error
+}
+
+func (reader fakeGoldenReader) Get(context.Context, string, string) (models.Golden, error) {
+	return reader.golden, reader.err
+}
+
 func (lister fakeSelectableResultLister) List(context.Context, string, string) ([]models.STTResultSummary, error) {
 	return lister.results, lister.err
 }
@@ -183,6 +210,76 @@ func TestGetStreamDetailMapsPresetIndexInconsistency(t *testing.T) {
 	}
 	if got.Error.Code != "preset_index_inconsistent" {
 		t.Fatalf("error code = %q, want preset_index_inconsistent", got.Error.Code)
+	}
+}
+
+func TestGetAlignmentForActiveVOD(t *testing.T) {
+	result := models.STTResult{
+		PresetID: testPresetID,
+		StreamID: testStreamID,
+		VODID:    testVODID,
+		Segments: []models.STTSegment{{StartMS: 100, EndMS: 900, Text: "hello"}},
+	}
+	preset := models.Preset{PresetID: testPresetID, Model: models.Model{Name: "large-v3", Params: map[string]any{}}}
+	engine := router.NewRouter(router.Dependencies{
+		VODs: fakeVODCatalog{vods: []models.VODSegment{{VODID: testVODID}}},
+		ResultProvider: fakeSelectableResultProvider{
+			results: map[string]models.STTResult{testPresetID: result},
+			presets: map[string]models.Preset{testPresetID: preset},
+		},
+		Golden: fakeGoldenReader{golden: models.Golden{StreamID: testStreamID, VODID: testVODID, Segments: []models.GoldenSegment{{SegmentID: "g1", StartMS: 0, EndMS: 1000, Text: "hello"}}}},
+		Logger: discardLogger(),
+	})
+
+	response := httptest.NewRecorder()
+	engine.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/streams/"+testStreamID+"/align?vod_id="+testVODID+"&preset_ids="+testPresetID, nil))
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", response.Code, http.StatusOK)
+	}
+	var got models.Alignment
+	if err := json.Unmarshal(response.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if got.StreamID != testStreamID || got.VODID != testVODID || len(got.SelectedResults) != 1 || got.SelectedResults[0].Error != nil || len(got.Rows) != 1 {
+		t.Fatalf("alignment = %#v, want one valid selected result and row", got)
+	}
+}
+
+func TestGetAlignmentUsesModelAWhenGoldenMissing(t *testing.T) {
+	result := models.STTResult{PresetID: testPresetID, StreamID: testStreamID, VODID: testVODID, Segments: []models.STTSegment{{StartMS: 0, EndMS: 500, Text: "hello"}}}
+	engine := router.NewRouter(router.Dependencies{
+		VODs: fakeVODCatalog{vods: []models.VODSegment{{VODID: testVODID}}},
+		ResultProvider: fakeSelectableResultProvider{
+			results: map[string]models.STTResult{testPresetID: result},
+			presets: map[string]models.Preset{testPresetID: {PresetID: testPresetID, Model: models.Model{Name: "large-v3", Params: map[string]any{}}}},
+		},
+		Golden: fakeGoldenReader{err: domain.ErrGoldenNotFound},
+		Logger: discardLogger(),
+	})
+
+	response := httptest.NewRecorder()
+	engine.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/streams/"+testStreamID+"/align?vod_id="+testVODID+"&preset_ids="+testPresetID, nil))
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", response.Code, http.StatusOK)
+	}
+	var got models.Alignment
+	if err := json.Unmarshal(response.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(got.Rows) != 1 || got.Rows[0].Golden.Text != "hello" {
+		t.Fatalf("rows = %#v, want effective Golden from Model A", got.Rows)
+	}
+}
+
+func TestGetAlignmentRequiresVODAndPresetIDs(t *testing.T) {
+	engine := router.NewRouter(router.Dependencies{Logger: discardLogger()})
+	for _, query := range []string{"?preset_ids=" + testPresetID, "?vod_id=" + testVODID} {
+		response := httptest.NewRecorder()
+		engine.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/streams/"+testStreamID+"/align"+query, nil))
+		if response.Code != http.StatusBadRequest {
+			t.Fatalf("query %q status = %d, want %d", query, response.Code, http.StatusBadRequest)
+		}
 	}
 }
 

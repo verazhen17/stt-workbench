@@ -27,6 +27,7 @@ func run(logger *slog.Logger) error {
 	presetCatalog := domain.NewFilesystemPresetCatalog(samplesFilesystem)
 	resultCatalog := domain.NewFilesystemResultCatalog(samplesFilesystem)
 	selectableResults := domain.NewSelectableResultCatalog(presetCatalog, resultCatalog)
+	goldenCatalog := domain.NewFilesystemGoldenCatalog(os.DirFS(settings.GoldenRoot))
 	vodCatalog, err := domain.NewFilesystemVODCatalog(
 		samplesFilesystem,
 		settings.SamplesRoot,
@@ -37,11 +38,13 @@ func run(logger *slog.Logger) error {
 		return err
 	}
 	engine := router.NewRouter(router.Dependencies{
-		Streams: streamCatalog,
-		Presets: presetCatalog,
-		VODs:    vodCatalog,
-		Results: selectableResults,
-		Logger:  logger,
+		Streams:        streamCatalog,
+		Presets:        presetCatalog,
+		VODs:           vodCatalog,
+		Results:        selectableResults,
+		ResultProvider: selectableResults,
+		Golden:         goldenCatalog,
+		Logger:         logger,
 	})
 
 	listener, err := net.Listen("tcp", settings.HTTPAddr)

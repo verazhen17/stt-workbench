@@ -58,7 +58,7 @@ type STTResult struct {
 }
 
 type GoldenSegment struct {
-	SegmentID string `json:"segment_id"`
+	SegmentID string `json:"segment_id,omitempty"`
 	StartMS   int64  `json:"start_ms"`
 	EndMS     int64  `json:"end_ms"`
 	Text      string `json:"text"`
@@ -81,7 +81,7 @@ type SelectedResult struct {
 	PresetID  string               `json:"preset_id"`
 	Model     Model                `json:"model"`
 	CreatedAt time.Time            `json:"created_at"`
-	Error     *SelectedResultError `json:"error,omitempty"`
+	Error     *SelectedResultError `json:"error"`
 }
 
 type AlignmentRow struct {

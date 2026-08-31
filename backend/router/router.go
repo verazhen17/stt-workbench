@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/17media/stt-workbench/backend/domain"
@@ -16,11 +17,13 @@ import (
 const shutdownTimeout = 5 * time.Second
 
 type Dependencies struct {
-	Streams domain.StreamCatalog
-	Presets domain.PresetCatalog
-	VODs    domain.VODCatalog
-	Results domain.SelectableResultLister
-	Logger  *slog.Logger
+	Streams        domain.StreamCatalog
+	Presets        domain.PresetCatalog
+	VODs           domain.VODCatalog
+	Results        domain.SelectableResultLister
+	ResultProvider domain.SelectableResultProvider
+	Golden         domain.GoldenReader
+	Logger         *slog.Logger
 }
 
 type Server struct {
@@ -29,11 +32,13 @@ type Server struct {
 }
 
 type streamHandler struct {
-	streams domain.StreamCatalog
-	presets domain.PresetCatalog
-	vods    domain.VODCatalog
-	results domain.SelectableResultLister
-	logger  *slog.Logger
+	streams  domain.StreamCatalog
+	presets  domain.PresetCatalog
+	vods     domain.VODCatalog
+	results  domain.SelectableResultLister
+	provider domain.SelectableResultProvider
+	golden   domain.GoldenReader
+	logger   *slog.Logger
 }
 
 type streamsResponse struct {
@@ -50,15 +55,18 @@ func NewRouter(dependencies Dependencies) *gin.Engine {
 	router.Use(requestLogger(dependencies.Logger), recovery(dependencies.Logger))
 
 	handler := streamHandler{
-		streams: dependencies.Streams,
-		presets: dependencies.Presets,
-		vods:    dependencies.VODs,
-		results: dependencies.Results,
-		logger:  dependencies.Logger,
+		streams:  dependencies.Streams,
+		presets:  dependencies.Presets,
+		vods:     dependencies.VODs,
+		results:  dependencies.Results,
+		provider: dependencies.ResultProvider,
+		golden:   dependencies.Golden,
+		logger:   dependencies.Logger,
 	}
 	router.GET("/api/presets", handler.listPresets)
 	router.GET("/api/streams", handler.list)
 	router.GET("/api/streams/:stream_id", handler.detail)
+	router.GET("/api/streams/:stream_id/align", handler.align)
 	return router
 }
 
@@ -174,6 +182,97 @@ func (handler streamHandler) detail(context *gin.Context) {
 	context.JSON(http.StatusOK, models.StreamDetail{StreamID: streamID, VODs: vods})
 }
 
+func (handler streamHandler) align(context *gin.Context) {
+	streamID := context.Param("stream_id")
+	vodID, hasVODID := context.GetQuery("vod_id")
+	if !hasVODID || vodID == "" {
+		writeError(context, http.StatusBadRequest, "invalid_request", "vod_id is required.", nil)
+		return
+	}
+	presetIDs, ok := parsePresetIDs(context.Query("preset_ids"))
+	if !ok {
+		writeError(context, http.StatusBadRequest, "invalid_preset_ids", "preset_ids must contain one or two different UUIDs.", nil)
+		return
+	}
+
+	vods, err := handler.vods.List(context.Request.Context(), streamID)
+	if err != nil {
+		handler.writeCatalogError(context, err, "find VOD")
+		return
+	}
+	vodFound := false
+	for _, vod := range vods {
+		if vod.VODID == vodID {
+			vodFound = true
+			break
+		}
+	}
+	if !vodFound {
+		writeError(context, http.StatusNotFound, "vod_not_found", "The requested VOD was not found.", nil)
+		return
+	}
+
+	selected := make([]models.SelectedResult, 0, len(presetIDs))
+	validResults := make([]models.STTResult, 0, len(presetIDs))
+	for _, presetID := range presetIDs {
+		result, preset, err := handler.provider.Get(context.Request.Context(), streamID, vodID, presetID)
+		if err != nil {
+			handler.writeCatalogError(context, err, "select STT result")
+			return
+		}
+		item := models.SelectedResult{PresetID: preset.PresetID, Model: preset.Model, CreatedAt: result.CreatedAt}
+		if err := domain.ValidateSTTSegments(result.Segments); err != nil {
+			item.Error = &models.SelectedResultError{Code: "invalid_segment", Message: "STT result contains invalid segments."}
+		} else {
+			validResults = append(validResults, result)
+		}
+		selected = append(selected, item)
+	}
+
+	golden, err := handler.golden.Get(context.Request.Context(), streamID, vodID)
+	if errors.Is(err, domain.ErrGoldenNotFound) {
+		if len(validResults) > 0 && selected[0].Error == nil {
+			golden = models.Golden{StreamID: streamID, VODID: vodID, Segments: make([]models.GoldenSegment, 0, len(validResults[0].Segments))}
+			for _, segment := range validResults[0].Segments {
+				golden.Segments = append(golden.Segments, models.GoldenSegment{StartMS: segment.StartMS, EndMS: segment.EndMS, Text: segment.Text})
+			}
+		} else {
+			golden = models.Golden{StreamID: streamID, VODID: vodID}
+		}
+	} else if err != nil {
+		handler.writeCatalogError(context, err, "read Golden")
+		return
+	}
+
+	rows := []models.AlignmentRow{}
+	if len(validResults) > 0 && (golden.VODID == "" || golden.VODID == vodID) {
+		rows, err = domain.Align(golden, validResults)
+		if err != nil {
+			handler.writeCatalogError(context, err, "align results")
+			return
+		}
+	}
+	context.JSON(http.StatusOK, models.Alignment{StreamID: streamID, VODID: vodID, SelectedResults: selected, Rows: rows})
+}
+
+func parsePresetIDs(value string) ([]string, bool) {
+	if value == "" {
+		return nil, false
+	}
+	parts := strings.Split(value, ",")
+	if len(parts) < 1 || len(parts) > 2 {
+		return nil, false
+	}
+	ids := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if !domain.IsValidUUID(part) || containsStreamID(ids, part) {
+			return nil, false
+		}
+		ids = append(ids, part)
+	}
+	return ids, true
+}
+
 func (handler streamHandler) writeCatalogError(context *gin.Context, err error, operation string) {
 	handler.logger.Error(operation, "error", err)
 	switch {
@@ -191,6 +290,10 @@ func (handler streamHandler) writeCatalogError(context *gin.Context, err error, 
 		writeError(context, http.StatusUnprocessableEntity, "vod_ingestion_failed", "The VOD could not be ingested.", nil)
 	case errors.Is(err, domain.ErrPresetIndexInconsistent):
 		writeError(context, http.StatusConflict, "preset_index_inconsistent", "Preset completion index is inconsistent with its canonical results.", nil)
+	case errors.Is(err, domain.ErrGoldenNotFound):
+		writeError(context, http.StatusNotFound, "golden_not_found", "The requested Golden was not found.", nil)
+	case errors.Is(err, domain.ErrGoldenInvalid):
+		writeError(context, http.StatusInternalServerError, "internal_error", "An internal error occurred.", nil)
 	default:
 		writeError(context, http.StatusInternalServerError, "internal_error", "An internal error occurred.", nil)
 	}

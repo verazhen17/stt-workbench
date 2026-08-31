@@ -26,6 +26,11 @@ type SelectableResultLister interface {
 	List(context.Context, string, string) ([]models.STTResultSummary, error)
 }
 
+type SelectableResultProvider interface {
+	SelectableResultLister
+	Get(context.Context, string, string, string) (models.STTResult, models.Preset, error)
+}
+
 type FilesystemResultCatalog struct {
 	filesystem ReadFS
 }
@@ -123,6 +128,24 @@ type SelectableResultCatalog struct {
 
 func NewSelectableResultCatalog(presets PresetCatalog, results ResultCatalog) *SelectableResultCatalog {
 	return &SelectableResultCatalog{presets: presets, results: results}
+}
+
+func (catalog *SelectableResultCatalog) Get(ctx context.Context, streamID, vodID, presetID string) (models.STTResult, models.Preset, error) {
+	preset, err := catalog.presets.Get(ctx, presetID)
+	if err != nil {
+		return models.STTResult{}, models.Preset{}, err
+	}
+	if !containsID(preset.StreamIDs, streamID) {
+		return models.STTResult{}, models.Preset{}, fmt.Errorf("%w: %s/%s", ErrSTTResultNotFound, streamID, presetID)
+	}
+	result, err := catalog.results.Get(ctx, streamID, vodID, presetID)
+	if errors.Is(err, ErrSTTResultNotFound) || errors.Is(err, ErrSTTResultInvalid) {
+		return models.STTResult{}, models.Preset{}, fmt.Errorf("%w: %s/%s", ErrPresetIndexInconsistent, streamID, presetID)
+	}
+	if err != nil {
+		return models.STTResult{}, models.Preset{}, err
+	}
+	return result, preset, nil
 }
 
 func (catalog *SelectableResultCatalog) List(ctx context.Context, streamID, vodID string) ([]models.STTResultSummary, error) {
