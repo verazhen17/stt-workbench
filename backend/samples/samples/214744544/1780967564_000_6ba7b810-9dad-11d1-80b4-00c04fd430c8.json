@@ -1,0 +1,13 @@
+{
+  "preset_id": "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
+  "stream_id": "214744544",
+  "vod_id": "1780967564_000",
+  "created_at": "2026-08-17T06:00:00Z",
+  "segments": [
+    {
+      "start_ms": 1000,
+      "end_ms": 500,
+      "text": "invalid segment"
+    }
+  ]
+}
