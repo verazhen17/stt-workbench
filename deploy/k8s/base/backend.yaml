@@ -1,0 +1,54 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: stt-workbench-backend
+  labels:
+    app.kubernetes.io/name: stt-workbench-backend
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: stt-workbench-backend
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: stt-workbench-backend
+      annotations:
+        gke-gcsfuse/volumes: "true"
+    spec:
+      serviceAccountName: stt-
+      containers:
+        - name: backend
+          image: stt-workbench-backend:stag
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: HTTP_ADDR
+              value: ":8080"
+            - name: SAMPLES_ROOT
+              value: /gcs_mount/samples
+            - name: GOLDEN_ROOT
+              value: /gcs_mount/golden
+            - name: VOD_URL_PREFIX
+              value: /vod
+            - name: FFPROBE_PATH
+              value: /usr/bin/ffprobe
+          ports:
+            - name: http
+              containerPort: 8080
+          volumeMounts:
+            - name: gcs-data
+              mountPath: /gcs_mount
+              readOnly: false
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+      volumes:
+        - name: gcs-data
+          csi:
+            driver: gcsfuse.csi.storage.gke.io
+            readOnly: false
+            volumeAttributes:
+              bucketName: media17-stream-stt-stag
+              mountOptions: implicit-dirs
