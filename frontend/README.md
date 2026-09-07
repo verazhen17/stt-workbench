@@ -2,13 +2,19 @@
 
 ## Local development
 
-Start the backend with the repository sample data:
+Prepare the local data directories first:
+
+```sh
+mkdir -p backend/data/samples backend/data/golden
+```
+
+Start the backend with the local data directories:
 
 ```sh
 cd backend
 HTTP_ADDR=127.0.0.1:8080 \
-SAMPLES_ROOT="$PWD/samples/samples" \
-GOLDEN_ROOT="$PWD/samples/golden" \
+SAMPLES_ROOT="$PWD/data/samples" \
+GOLDEN_ROOT="$PWD/data/golden" \
 VOD_URL_PREFIX=/vod \
 FFPROBE_PATH="$(command -v ffprobe)" \
 go run .
