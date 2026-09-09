@@ -1,0 +1,29 @@
+name: stt-workbench
+
+services:
+  stt-workbench-backend:
+    image: stt-workbench-backend:dev
+    build:
+      context: ./backend
+    environment:
+      HTTP_ADDR: ":8080"
+      SAMPLES_ROOT: /app/data/samples
+      GOLDEN_ROOT: /app/data/golden
+      VOD_URL_PREFIX: /vod
+      FFPROBE_PATH: /usr/bin/ffprobe
+    volumes:
+      - ./backend/data/samples:/app/data/samples:ro
+      - ./backend/data/golden:/app/data/golden:rw
+    expose:
+      - "8080"
+
+  frontend:
+    image: stt-workbench-frontend:dev
+    build:
+      context: ./frontend
+    depends_on:
+      - stt-workbench-backend
+    ports:
+      - "8888:80"
+    volumes:
+      - ./backend/data/samples:/srv/vod:ro
