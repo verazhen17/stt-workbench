@@ -18,6 +18,8 @@ spec:
       annotations:
         gke-gcsfuse/volumes: "true"
     spec:
+      nodeSelector:
+        workload: general
       serviceAccountName: stt-
       containers:
         - name: backend

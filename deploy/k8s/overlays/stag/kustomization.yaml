@@ -10,5 +10,3 @@ images:
   - name: stt-workbench-frontend
     newName: gcr.io/media17-streaming/stt/workbench-frontend
     newTag: stag
-patches:
-  - path: patch-frontend-service.yaml

@@ -20,7 +20,7 @@ metadata:
   labels:
     app.kubernetes.io/name: stt-workbench-frontend
 spec:
-  type: ClusterIP
+  type: LoadBalancer
   ports:
     - name: http
       port: 80
