@@ -22,10 +22,13 @@ The browser entry point is `http://localhost:8888`. `samples` is mounted read-on
 
 The staging deployment follows the same split as local: Nginx/frontend is the only
 public service and the Go backend remains a ClusterIP-only service on port 8080.
-The overlay uses the same GKE GCS Fuse CSI driver and staging bucket as the
-existing `stt-service`: `media17-stream-stt-stag`. The workbench reads
-`samples/` and writes only `golden/`; it does not create or share a PVC with
-`stt-service`.
+The overlay uses the GKE GCS Fuse CSI driver and production bucket
+`media17-stream-stt-prod`. The backend mounts only `samples/` read-only and
+`golden_samples/` read-write; the frontend mounts only `samples/` read-only.
+It does not create or share a PVC with `stt-service`.
+
+The Pods use the dedicated Kubernetes ServiceAccount `stt-workbench`. Its access
+is granted directly to the KSA principal in GCP IAM; no GSA annotation is required.
 
 ```sh
 kubectl apply -k deploy/k8s/overlays/stag

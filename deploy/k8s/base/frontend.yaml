@@ -18,7 +18,7 @@ spec:
     spec:
       nodeSelector:
         workload: general
-      serviceAccountName: stt-
+      serviceAccountName: stt-workbench
       containers:
         - name: frontend
           image: stt-workbench-frontend:stag
@@ -27,7 +27,7 @@ spec:
             - name: http
               containerPort: 80
           volumeMounts:
-            - name: gcs-data
+            - name: gcs-samples
               mountPath: /srv/vod
               readOnly: true
             - name: nginx-cache
@@ -38,13 +38,13 @@ spec:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
       volumes:
-        - name: gcs-data
+        - name: gcs-samples
           csi:
             driver: gcsfuse.csi.storage.gke.io
             readOnly: true
             volumeAttributes:
-              bucketName: media17-stream-stt-stag
-              mountOptions: implicit-dirs
+              bucketName: media17-stream-stt-prod
+              mountOptions: "implicit-dirs,only-dir=samples"
         - name: nginx-cache
           emptyDir: {}
         - name: nginx-run

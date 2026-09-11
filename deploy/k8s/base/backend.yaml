@@ -20,7 +20,7 @@ spec:
     spec:
       nodeSelector:
         workload: general
-      serviceAccountName: stt-
+      serviceAccountName: stt-workbench
       containers:
         - name: backend
           image: stt-workbench-backend:stag
@@ -31,7 +31,7 @@ spec:
             - name: SAMPLES_ROOT
               value: /gcs_mount/samples
             - name: GOLDEN_ROOT
-              value: /gcs_mount/golden
+              value: /gcs_mount/golden_samples
             - name: VOD_URL_PREFIX
               value: /vod
             - name: FFPROBE_PATH
@@ -40,17 +40,27 @@ spec:
             - name: http
               containerPort: 8080
           volumeMounts:
-            - name: gcs-data
-              mountPath: /gcs_mount
+            - name: gcs-samples
+              mountPath: /gcs_mount/samples
+              readOnly: true
+            - name: gcs-golden
+              mountPath: /gcs_mount/golden_samples
               readOnly: false
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
       volumes:
-        - name: gcs-data
+        - name: gcs-samples
+          csi:
+            driver: gcsfuse.csi.storage.gke.io
+            readOnly: true
+            volumeAttributes:
+              bucketName: media17-stream-stt-prod
+              mountOptions: "implicit-dirs,only-dir=samples"
+        - name: gcs-golden
           csi:
             driver: gcsfuse.csi.storage.gke.io
             readOnly: false
             volumeAttributes:
-              bucketName: media17-stream-stt-stag
-              mountOptions: implicit-dirs
+              bucketName: media17-stream-stt-prod
+              mountOptions: "implicit-dirs,only-dir=golden_samples"
