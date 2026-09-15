@@ -6,13 +6,18 @@ from __future__ import annotations
 import argparse
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import json
+from pathlib import Path
 import re
 import sys
 import threading
+from typing import Any, Callable
 import uuid
 from datetime import datetime, timezone
-from pathlib import Path
-from typing import Any, Callable
+
+try:
+    from whisper import transcribe_audio
+except ImportError:
+    from .whisper import transcribe_audio
 
 
 STREAM_ID_PATTERN = re.compile(r"^[A-Za-z0-9-]+$")
@@ -91,16 +96,17 @@ def run_batch(
     created_at = utc_now()
     preset_path = samples_root / "presets" / f"{preset_id}.json"
     params: dict[str, Any] = {
-        "temperature": args.temperature,
-        "beam_size": args.beam_size,
-        "vad_filter": args.vad_filter,
-        "device": args.device,
-        "compute_type": args.compute_type,
+        "temperature": getattr(args, "temperature", 0.0),
+        "beam_size": getattr(args, "beam_size", 5),
+        "vad_filter": getattr(args, "vad_filter", True),
+        "device": getattr(args, "device", "cpu"),
+        "compute_type": getattr(args, "compute_type", "int8"),
     }
-    if args.language:
+    if getattr(args, "language", ""):
         params["language"] = args.language
-    if args.initial_prompt:
-        params["initial_prompt"] = args.initial_prompt
+    prompt = getattr(args, "prompt", "") or getattr(args, "initial_prompt", "")
+    if prompt:
+        params["initial_prompt"] = prompt
 
     # The backend rejects unknown preset fields; run labels belong in the report.
     preset: dict[str, Any] = {
@@ -151,42 +157,40 @@ def run_batch(
 
     # Each thread owns and reuses its model; increasing concurrency costs model memory.
     worker_state = threading.local()
-    transcribe_options: dict[str, Any] = {
-        "beam_size": args.beam_size,
-        "temperature": args.temperature,
-        "vad_filter": args.vad_filter,
-    }
-    if args.language:
-        transcribe_options["language"] = args.language
-    if args.initial_prompt:
-        transcribe_options["initial_prompt"] = args.initial_prompt
 
     def process_job(job: tuple[Path, dict[str, Any], Path]) -> None:
         wav_path, item, output_path = job
         try:
             if not hasattr(worker_state, "model"):
-                worker_state.model = model_factory(args.model, args.device, args.compute_type)
-            segments, _info = worker_state.model.transcribe(str(wav_path), **transcribe_options)
+                worker_state.model = model_factory(args.model, getattr(args, "device", "cpu"), getattr(args, "compute_type", "int8"))
+            
+            segments, detected_language, error = transcribe_audio(
+                file_path=str(wav_path),
+                model=worker_state.model,
+                chunk_length=getattr(args, "chunk_length", 150),
+                prompt=prompt,
+                language=getattr(args, "language", ""),
+                beam_size=getattr(args, "beam_size", 5),
+                vad_filter=getattr(args, "vad_filter", True),
+            )
+            if error:
+                item.update(status="failed", error=error)
+                return
+
             result = {
                 "preset_id": preset_id,
                 "stream_id": item["stream_id"],
                 "vod_id": item["vod_id"],
+                "language": detected_language,
                 "created_at": utc_now(),
-                # Consume the lazy inference iterator here, before publishing success.
-                # Workbench stores integer milliseconds, not formatted timestamps.
-                "segments": [
-                    {
-                        "start_ms": round(segment.start * 1000),
-                        "end_ms": round(segment.end * 1000),
-                        "text": segment.text,
-                    }
-                    for segment in segments
-                ],
+                "segments": segments,
             }
             atomic_json_write(output_path, result)
             item["status"] = "completed"
-        except Exception as error:
-            item.update(status="failed", error=str(error))
+            if detected_language:
+                item["language"] = detected_language
+        except Exception as err:
+            item.update(status="failed", error=str(err))
 
     if runnable_jobs:
         with ThreadPoolExecutor(max_workers=args.concurrency) as executor:
@@ -224,7 +228,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--beam-size", type=int, default=5)
     parser.add_argument("--vad-filter", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--language", default="")
+    parser.add_argument("--prompt", default="", help="Initial prompt (alias for --initial-prompt)")
     parser.add_argument("--initial-prompt", default="")
+    parser.add_argument("--chunk-length", "--chunk_length", type=int, default=150, dest="chunk_length")
     parser.add_argument("--device", default="cuda")
     parser.add_argument("--compute-type", default="float16")
     parser.add_argument(

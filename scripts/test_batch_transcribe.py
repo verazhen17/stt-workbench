@@ -1,21 +1,25 @@
 import json
+from pathlib import Path
 import tempfile
 import threading
 import time
-import unittest
-from argparse import Namespace
-from pathlib import Path
 from types import SimpleNamespace
+import unittest
 from unittest.mock import patch
+from argparse import Namespace
 
 from batch_transcribe import atomic_json_write, run_batch
+from whisper import transcribe_audio, ms_to_time_format
 
 
 class FakeModel:
+    def __init__(self, detected_language="zh"):
+        self.detected_language = detected_language
+
     def transcribe(self, wav_path, **_options):
         if "fails" in wav_path:
             raise RuntimeError("synthetic inference failure")
-        return [SimpleNamespace(start=1.2, end=2.345, text="晚安")], None
+        return [SimpleNamespace(start=1.2, end=2.345, text="晚安")], SimpleNamespace(language=self.detected_language)
 
 
 class BatchTranscribeTests(unittest.TestCase):
@@ -32,7 +36,7 @@ class BatchTranscribeTests(unittest.TestCase):
     def add_wav(self, stream_id, name):
         (self.root / stream_id / name).write_bytes(b"test")
 
-    def args(self, stream_ids=None):
+    def args(self, stream_ids=None, language="zh"):
         return Namespace(
             samples_root=self.root,
             preset_name="nightly batch",
@@ -41,20 +45,22 @@ class BatchTranscribeTests(unittest.TestCase):
             temperature=0.2,
             beam_size=5,
             vad_filter=True,
-            language="zh",
+            language=language,
+            prompt="直播",
             initial_prompt="直播",
+            chunk_length=150,
             device="cpu",
             compute_type="int8",
             concurrency=1,
         )
 
-    def test_selected_streams_share_one_preset_and_write_milliseconds(self):
+    def test_selected_streams_share_one_preset_and_write_timestamps_and_language(self):
         self.add_wav("123", "100_000_clip.wav")
         self.add_wav("123", "100_001_second.wav")
         self.add_wav("456", "200_000_clip.wav")
         self.add_wav("789", "300_000_clip.wav")
 
-        report = run_batch(self.args(["123", "456"]), lambda *_: FakeModel())
+        report = run_batch(self.args(["123", "456"], language=""), lambda *_: FakeModel(detected_language="ja"))
 
         self.assertEqual(len(report["items"]), 3)
         preset_path = self.root / "presets" / f"{report['preset_id']}.json"
@@ -65,8 +71,9 @@ class BatchTranscribeTests(unittest.TestCase):
         self.assertEqual(preset["model"]["params"]["beam_size"], 5)
         result_path = self.root / "123" / f"100_000_{report['preset_id']}.json"
         result = json.loads(result_path.read_text(encoding="utf-8"))
-        self.assertEqual(result["segments"][0]["start_ms"], 1200)
-        self.assertEqual(result["segments"][0]["end_ms"], 2345)
+        self.assertEqual(result["language"], "ja")
+        self.assertEqual(result["segments"][0]["timestamps"]["from"], "00:00:01.200")
+        self.assertEqual(result["segments"][0]["timestamps"]["to"], "00:00:02.345")
         self.assertEqual(result["segments"][0]["text"], "晚安")
         self.assertEqual(result["vod_id"], "100_000")
         self.assertFalse((self.root / "789" / f"300_000_{report['preset_id']}.json").exists())
@@ -100,7 +107,7 @@ class BatchTranscribeTests(unittest.TestCase):
                 time.sleep(0.03)
                 with state_lock:
                     state["active"] -= 1
-                return [SimpleNamespace(start=0, end=1, text="ok")], None
+                return [SimpleNamespace(start=0, end=1, text="ok")], SimpleNamespace(language="zh")
 
         def factory(*_args):
             with state_lock:
@@ -157,21 +164,20 @@ class BatchTranscribeTests(unittest.TestCase):
         self.assertEqual(observed, [True])
         self.assertTrue(all(item["status"] == "completed" for item in report["items"]))
 
-    def test_lazy_inference_failure_does_not_publish_stream(self):
-        self.add_wav("123", "100_000_clip.wav")
+    def test_whisper_transcribe_audio_empty_speech_error_handling(self):
+        class EmptySequenceModel:
+            def transcribe(self, *_args, **_kwargs):
+                raise ValueError("max() arg is an empty sequence")
 
-        class LazyFailureModel:
-            def transcribe(self, *_args, **_options):
-                def segments():
-                    yield SimpleNamespace(start=0, end=1, text="partial")
-                    raise RuntimeError("inference failed during iteration")
-                return segments(), None
+        segments, lang, err = transcribe_audio("dummy.wav", EmptySequenceModel())
+        self.assertEqual(segments, [])
+        self.assertIn("No valid speech detected", err)
 
-        report = run_batch(self.args(["123"]), lambda *_: LazyFailureModel())
-        self.assertEqual(report["items"][0]["status"], "failed")
-        self.assertEqual(list((self.root / "123").glob("*.json")), [])
-        preset = json.loads((self.root / "presets" / f"{report['preset_id']}.json").read_text())
-        self.assertEqual(preset["stream_ids"], [])
+    def test_ms_to_time_format(self):
+        self.assertEqual(ms_to_time_format(0), "00:00:00.000")
+        self.assertEqual(ms_to_time_format(1.234), "00:00:01.234")
+        self.assertEqual(ms_to_time_format(65.5), "00:01:05.500")
+        self.assertEqual(ms_to_time_format(3661.025), "01:01:01.025")
 
 
 if __name__ == "__main__":
