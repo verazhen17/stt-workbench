@@ -108,9 +108,9 @@ def run_batch(
     if prompt:
         params["initial_prompt"] = prompt
 
-    # The backend rejects unknown preset fields; run labels belong in the report.
     preset: dict[str, Any] = {
         "preset_id": preset_id,
+        "name": args.preset_name,
         "model": {"name": args.model, "params": params},
         "stream_ids": [],
         "created_at": created_at,

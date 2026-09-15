@@ -66,7 +66,8 @@ class BatchTranscribeTests(unittest.TestCase):
         preset_path = self.root / "presets" / f"{report['preset_id']}.json"
         preset = json.loads(preset_path.read_text(encoding="utf-8"))
         self.assertEqual(report["preset_name"], "nightly batch")
-        self.assertEqual(set(preset), {"preset_id", "model", "stream_ids", "created_at", "updated_at"})
+        self.assertEqual(set(preset), {"preset_id", "name", "model", "stream_ids", "created_at", "updated_at"})
+        self.assertEqual(preset["name"], "nightly batch")
         self.assertEqual(preset["stream_ids"], ["123", "456"])
         self.assertEqual(preset["model"]["params"]["beam_size"], 5)
         result_path = self.root / "123" / f"100_000_{report['preset_id']}.json"
