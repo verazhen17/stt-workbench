@@ -14,9 +14,11 @@
   "segments": [
     {
       "segment_id": "seg_b_001",
-      "start_ms": 100,
-      "end_ms": 950,
-      "text": "大家晚安"
+      "text": "大家晚安",
+      "timestamps": {
+        "from": "00:00:00.100",
+        "to": "00:00:00.950"
+      }
     }
   ]
 }

@@ -235,7 +235,7 @@ func TestGetAlignmentForActiveVOD(t *testing.T) {
 		PresetID: testPresetID,
 		StreamID: testStreamID,
 		VODID:    testVODID,
-		Segments: []models.STTSegment{{StartMS: 100, EndMS: 900, Text: "hello"}},
+		Segments: []models.STTSegment{{Timestamps: models.Timestamps{From: "00:00:00.100", To: "00:00:00.900"}, Text: "hello"}},
 	}
 	preset := models.Preset{PresetID: testPresetID, Model: models.Model{Name: "large-v3", Params: map[string]any{}}}
 	engine := router.NewRouter(router.Dependencies{
@@ -244,7 +244,7 @@ func TestGetAlignmentForActiveVOD(t *testing.T) {
 			results: map[string]models.STTResult{testPresetID: result},
 			presets: map[string]models.Preset{testPresetID: preset},
 		},
-		Golden: fakeGoldenReader{golden: models.Golden{StreamID: testStreamID, VODID: testVODID, Segments: []models.GoldenSegment{{SegmentID: "g1", StartMS: 0, EndMS: 1000, Text: "hello"}}}},
+		Golden: fakeGoldenReader{golden: models.Golden{StreamID: testStreamID, VODID: testVODID, Segments: []models.GoldenSegment{{SegmentID: "g1", Timestamps: models.Timestamps{From: "00:00:00.000", To: "00:00:01.000"}, Text: "hello"}}}},
 		Logger: discardLogger(),
 	})
 
@@ -264,7 +264,7 @@ func TestGetAlignmentForActiveVOD(t *testing.T) {
 }
 
 func TestGetAlignmentUsesModelAWhenGoldenMissing(t *testing.T) {
-	result := models.STTResult{PresetID: testPresetID, StreamID: testStreamID, VODID: testVODID, Segments: []models.STTSegment{{StartMS: 0, EndMS: 500, Text: "hello"}}}
+	result := models.STTResult{PresetID: testPresetID, StreamID: testStreamID, VODID: testVODID, Segments: []models.STTSegment{{Timestamps: models.Timestamps{From: "00:00:00.000", To: "00:00:00.500"}, Text: "hello"}}}
 	engine := router.NewRouter(router.Dependencies{
 		VODs: fakeVODCatalog{vods: []models.VODSegment{{VODID: testVODID}}},
 		ResultProvider: fakeSelectableResultProvider{
@@ -325,7 +325,7 @@ func TestSaveGoldenEditsAndMapsValidationFailure(t *testing.T) {
 	engine := router.NewRouter(router.Dependencies{GoldenManager: manager, Logger: discardLogger()})
 
 	response := httptest.NewRecorder()
-	body := bytes.NewBufferString(`{"vod_id":"` + testVODID + `","mode":"edit","segments":[{"start_ms":0,"end_ms":1000,"text":"hello"}]}`)
+	body := bytes.NewBufferString(`{"vod_id":"` + testVODID + `","mode":"edit","segments":[{"timestamps":{"from":"00:00:00.000","to":"00:00:01.000"},"text":"hello"}]}`)
 	engine.ServeHTTP(response, httptest.NewRequest(http.MethodPut, "/api/streams/"+testStreamID+"/golden", body))
 
 	if response.Code != http.StatusUnprocessableEntity || manager.mode != "edit" {

@@ -124,10 +124,9 @@ func (service *GoldenService) Renew(ctx context.Context, streamID, vodID, source
 	}
 	for index, segment := range result.Segments {
 		golden.Segments = append(golden.Segments, models.GoldenSegment{
-			SegmentID: fmt.Sprintf("golden_segment_%03d", index+1),
-			StartMS:   segment.StartMS,
-			EndMS:     segment.EndMS,
-			Text:      segment.Text,
+			SegmentID:  fmt.Sprintf("golden_segment_%03d", index+1),
+			Timestamps: segment.Timestamps,
+			Text:       segment.Text,
 		})
 	}
 	if err := service.store.Save(ctx, golden); err != nil {
@@ -149,10 +148,9 @@ func (service *GoldenService) Edit(ctx context.Context, streamID, vodID string, 
 	updated.Segments = make([]models.GoldenSegment, len(edits))
 	for index, edit := range edits {
 		updated.Segments[index] = models.GoldenSegment{
-			SegmentID: current.Segments[index].SegmentID,
-			StartMS:   edit.StartMS,
-			EndMS:     edit.EndMS,
-			Text:      edit.Text,
+			SegmentID:  current.Segments[index].SegmentID,
+			Timestamps: edit.Timestamps,
+			Text:       edit.Text,
 		}
 	}
 	if err := ValidateGoldenSegments(updated.Segments); err != nil {

@@ -167,6 +167,7 @@ func (catalog *SelectableResultCatalog) List(ctx context.Context, streamID, vodI
 		}
 		summaries = append(summaries, models.STTResultSummary{
 			PresetID:  preset.PresetID,
+			Name:      preset.Name,
 			Model:     preset.Model,
 			CreatedAt: result.CreatedAt,
 		})

@@ -14,9 +14,11 @@ type sttSample struct {
 	VODID     string `json:"vod_id"`
 	CreatedAt string `json:"created_at"`
 	Segments  []struct {
-		StartMS int64  `json:"start_ms"`
-		EndMS   int64  `json:"end_ms"`
-		Text    string `json:"text"`
+		Timestamps struct {
+			From string `json:"from"`
+			To   string `json:"to"`
+		} `json:"timestamps"`
+		Text string `json:"text"`
 	} `json:"segments"`
 }
 
@@ -99,8 +101,8 @@ func TestSamples(t *testing.T) {
 		if sample.PresetID == "" || sample.StreamID == "" {
 			t.Fatal("invalid segment sample must retain selectable identity")
 		}
-		if len(sample.Segments) != 1 || sample.Segments[0].EndMS > sample.Segments[0].StartMS {
-			t.Fatal("invalid segment sample must have end_ms <= start_ms")
+		if len(sample.Segments) != 1 || sample.Segments[0].Timestamps.To > sample.Segments[0].Timestamps.From {
+			t.Fatal("invalid segment sample must have to <= from")
 		}
 	})
 

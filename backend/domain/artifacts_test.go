@@ -25,6 +25,7 @@ func TestFilesystemPresetCatalogListsNormalizedPresets(t *testing.T) {
 	root := t.TempDir()
 	writeJSON(t, filepath.Join(root, "presets", presetA+".json"), models.Preset{
 		PresetID:  presetA,
+		Name:      "local test",
 		Model:     models.Model{Name: "large-v3", Params: map[string]any{"temperature": 0.2}},
 		CreatedAt: time.Date(2026, 8, 17, 5, 30, 0, 0, time.UTC),
 		UpdatedAt: time.Date(2026, 8, 17, 5, 30, 0, 0, time.UTC),
@@ -38,6 +39,7 @@ func TestFilesystemPresetCatalogListsNormalizedPresets(t *testing.T) {
 	}
 	want := []models.Preset{{
 		PresetID:  presetA,
+		Name:      "local test",
 		Model:     models.Model{Name: "large-v3", Params: map[string]any{"temperature": 0.2}},
 		CreatedAt: time.Date(2026, 8, 17, 5, 30, 0, 0, time.UTC),
 		UpdatedAt: time.Date(2026, 8, 17, 5, 30, 0, 0, time.UTC),
@@ -63,7 +65,7 @@ func TestFilesystemResultCatalogListsPerVODResults(t *testing.T) {
 	writeJSON(t, filepath.Join(root, streamA, vodA+"_"+presetA+".json"), models.STTResult{
 		PresetID: presetA, StreamID: streamA, VODID: vodA,
 		CreatedAt: time.Date(2026, 8, 17, 5, 35, 0, 0, time.UTC),
-		Segments:  []models.STTSegment{{StartMS: 0, EndMS: 1000, Text: "hello"}},
+		Segments:  []models.STTSegment{{Timestamps: models.Timestamps{From: "00:00:00.000", To: "00:00:01.000"}, Text: "hello"}},
 	})
 
 	results := domain.NewFilesystemResultCatalog(os.DirFS(root))
