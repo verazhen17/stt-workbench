@@ -167,7 +167,7 @@ def run_batch(
             segments, detected_language, error = transcribe_audio(
                 file_path=str(wav_path),
                 model=worker_state.model,
-                chunk_length=getattr(args, "chunk_length", 150),
+                chunk_length=getattr(args, "chunk_length", 5),
                 prompt=prompt,
                 language=getattr(args, "language", ""),
                 beam_size=getattr(args, "beam_size", 5),
@@ -230,7 +230,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--language", default="")
     parser.add_argument("--prompt", default="", help="Initial prompt (alias for --initial-prompt)")
     parser.add_argument("--initial-prompt", default="")
-    parser.add_argument("--chunk-length", "--chunk_length", type=int, default=150, dest="chunk_length")
+    parser.add_argument("--chunk-length", "--chunk_length", type=int, default=5, dest="chunk_length", help="Chunk length in minutes (matching stt-service's default configuration)")
     parser.add_argument("--device", default="cuda")
     parser.add_argument("--compute-type", default="float16")
     parser.add_argument(

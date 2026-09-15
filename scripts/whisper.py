@@ -14,7 +14,7 @@ except ImportError:
 
 def ms_to_time_format(seconds: float) -> str:
     """Format seconds into HH:MM:SS.mmm (matching stt-service TranscriptionOutput)."""
-    return time.strftime("%H:%M:%S", time.gmtime(seconds)) + (".%03d" % int(round((seconds % 1) * 1000)))
+    return time.strftime("%H:%M:%S", time.gmtime(seconds)) + (".%03d" % int((seconds % 1) * 1000))
 
 
 def slice_audio(input_path: str, output_dir: str, chunk_length_ms: int) -> list[str]:
@@ -54,7 +54,7 @@ def segment_transcribe(file_path: str, model, transcribe_kwargs: dict):
 def transcribe_audio(
     file_path: str,
     model,
-    chunk_length: int = 150,
+    chunk_length: int = 5,
     prompt: str = "",
     language: str = "",
     beam_size: int = 5,
@@ -150,7 +150,7 @@ def main():
     parser.add_argument("--model", type=str, default="large-v3", help="Specify the model name.")
     parser.add_argument("--language", type=str, default="", help="Specify the language for transcription.")
     parser.add_argument("--prompt", type=str, default="", help="Specify the initial prompt for transcription.")
-    parser.add_argument("--chunk_length", type=int, default=150, help="Specify the chunk length for transcription.")
+    parser.add_argument("--chunk_length", type=int, default=5, help="Chunk length in minutes (matching stt-service's default configuration).")
     parser.add_argument("--device", type=str, default="cuda" if os.getenv("USE_CUDA") == "1" else "cpu")
     parser.add_argument("--compute_type", type=str, default="float16" if os.getenv("USE_CUDA") == "1" else "int8")
     parser.add_argument("file_path", type=str, nargs="?", help="Path to the audio file.")

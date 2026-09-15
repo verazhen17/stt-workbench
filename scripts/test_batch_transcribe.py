@@ -8,7 +8,7 @@ import unittest
 from unittest.mock import patch
 from argparse import Namespace
 
-from batch_transcribe import atomic_json_write, run_batch
+from batch_transcribe import atomic_json_write, build_parser, run_batch
 from whisper import transcribe_audio, ms_to_time_format
 
 
@@ -48,7 +48,7 @@ class BatchTranscribeTests(unittest.TestCase):
             language=language,
             prompt="直播",
             initial_prompt="直播",
-            chunk_length=150,
+            chunk_length=5,
             device="cpu",
             compute_type="int8",
             concurrency=1,
@@ -73,7 +73,7 @@ class BatchTranscribeTests(unittest.TestCase):
         result_path = self.root / "123" / f"100_000_{report['preset_id']}.json"
         result = json.loads(result_path.read_text(encoding="utf-8"))
         self.assertEqual(result["language"], "ja")
-        self.assertEqual(result["segments"][0]["timestamps"]["from"], "00:00:01.200")
+        self.assertEqual(result["segments"][0]["timestamps"]["from"], "00:00:01.199")
         self.assertEqual(result["segments"][0]["timestamps"]["to"], "00:00:02.345")
         self.assertEqual(result["segments"][0]["text"], "晚安")
         self.assertEqual(result["vod_id"], "100_000")
@@ -176,9 +176,16 @@ class BatchTranscribeTests(unittest.TestCase):
 
     def test_ms_to_time_format(self):
         self.assertEqual(ms_to_time_format(0), "00:00:00.000")
+        self.assertEqual(ms_to_time_format(1.2), "00:00:01.199")
         self.assertEqual(ms_to_time_format(1.234), "00:00:01.234")
         self.assertEqual(ms_to_time_format(65.5), "00:01:05.500")
         self.assertEqual(ms_to_time_format(3661.025), "01:01:01.025")
+        self.assertEqual(ms_to_time_format(1.2349), "00:00:01.234")
+        self.assertEqual(ms_to_time_format(1.9999), "00:00:01.999")
+
+    def test_default_chunk_length_matches_service_configuration(self):
+        args = build_parser().parse_args(["--preset-name", "test", "--model", "large-v3"])
+        self.assertEqual(args.chunk_length, 5)
 
 
 if __name__ == "__main__":
