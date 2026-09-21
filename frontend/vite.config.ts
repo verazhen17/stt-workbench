@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
-const vodRoot = fileURLToPath(new URL("../backend/samples/samples", import.meta.url));
+const vodRoot = fileURLToPath(new URL("../backend/data/samples", import.meta.url));
 
 export default defineConfig({
   plugins: [
