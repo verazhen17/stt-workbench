@@ -13,6 +13,18 @@ function formatTime(seconds: number): string {
   return `${String(minutes).padStart(2, "0")}:${String(remainingSeconds).padStart(2, "0")}`;
 }
 
+function timestampToSeconds(timestamp: string): number {
+  if (!timestamp) return 0;
+  const parts = timestamp.split(":");
+  if (parts.length === 3) {
+    const hours = Number(parts[0]) || 0;
+    const minutes = Number(parts[1]) || 0;
+    const seconds = Number(parts[2]) || 0;
+    return hours * 3600 + minutes * 60 + seconds;
+  }
+  return Number(timestamp) || 0;
+}
+
 export default function App() {
   const { presets, streams, detail, loadCatalog, loadDetail } = useWorkspaceData();
   const [filterPresetId, setFilterPresetId] = useState("");
@@ -113,21 +125,25 @@ export default function App() {
   const canEditGolden = Boolean(persistedGolden?.length);
   const startGoldenEdit = () => {
     if (!persistedGolden) return;
-    setGoldenDraft(persistedGolden.map((row) => ({ ...row.golden })));
+    setGoldenDraft(persistedGolden.map((row) => ({ timestamps: { ...row.golden.timestamps }, text: row.golden.text })));
     setEditingGolden(true);
   };
-  const updateGoldenDraft = (index: number, field: keyof GoldenEditSegment, value: string) => {
-    setGoldenDraft((current) => current.map((segment, segmentIndex) => segmentIndex === index ? { ...segment, [field]: field === "text" ? value : Number(value) } : segment));
+  const updateGoldenDraft = (index: number, field: "from" | "to" | "text", value: string) => {
+    setGoldenDraft((current) => current.map((segment, segmentIndex) => {
+      if (segmentIndex !== index) return segment;
+      if (field === "text") return { ...segment, text: value };
+      return { ...segment, timestamps: { ...segment.timestamps, [field]: value } };
+    }));
   };
   const saveGoldenEdits = async () => {
     if (!streamId || !activeVod) return;
     for (let index = 0; index < goldenDraft.length; index += 1) {
       const segment = goldenDraft[index];
-      if (segment.start_ms < 0 || segment.end_ms <= segment.start_ms) {
+      if (!segment.timestamps.from || !segment.timestamps.to || segment.timestamps.to <= segment.timestamps.from) {
         setAlignment({ data: alignment.data, loading: false, error: new Error(`Golden row ${index + 1} has an invalid interval.`) });
         return;
       }
-      if (index > 0 && segment.start_ms < goldenDraft[index - 1].end_ms) {
+      if (index > 0 && segment.timestamps.from < goldenDraft[index - 1].timestamps.to) {
         setAlignment({ data: alignment.data, loading: false, error: new Error(`Golden row ${index + 1} overlaps the previous row.`) });
         return;
       }
@@ -155,25 +171,25 @@ export default function App() {
       setGoldenSaving(false);
     }
   };
-  const seekTo = (startMS: number, alignmentRowIndex?: number) => {
+  const seekTo = (timestampStr: string, alignmentRowIndex?: number) => {
     if (!videoRef.current) return;
-    videoRef.current.currentTime = startMS / 1000;
+    videoRef.current.currentTime = timestampToSeconds(timestampStr);
     void videoRef.current.play().catch(() => {
       setPlayerError("瀏覽器阻擋自動播放，請按播放鍵繼續。");
     });
     if (alignmentRowIndex === undefined) return;
     scrollAlignmentToRow(alignmentRowIndex);
   };
-  const scrollAlignmentToTimestamp = (timestampMS: number) => {
+  const scrollAlignmentToTimestamp = (currentTimeSec: number) => {
     const container = alignmentTableRef.current;
     if (!container) return;
     const rows = Array.from(container.querySelectorAll<HTMLElement>("[data-alignment-row-index]"));
     const matchingRow = rows.find((row) => {
-      const startMS = Number(row.dataset.alignmentStartMs);
-      const endMS = Number(row.dataset.alignmentEndMs);
-      return timestampMS >= startMS && timestampMS < endMS;
+      const start = timestampToSeconds(row.dataset.alignmentStart ?? "00:00:00.000");
+      const end = timestampToSeconds(row.dataset.alignmentEnd ?? "00:00:00.000");
+      return currentTimeSec >= start && currentTimeSec < end;
     });
-    const nextRow = rows.find((row) => timestampMS < Number(row.dataset.alignmentStartMs));
+    const nextRow = rows.find((row) => currentTimeSec < timestampToSeconds(row.dataset.alignmentStart ?? "00:00:00.000"));
     const row = matchingRow ?? nextRow ?? rows.at(-1);
     if (row) scrollAlignmentToRow(Number(row.dataset.alignmentRowIndex));
   };
@@ -207,7 +223,7 @@ export default function App() {
           Preset filter
           <select value={filterPresetId} onChange={(event) => setFilterPresetId(event.target.value)}>
             <option value="">All streams</option>
-            {presets.data.map((preset) => <option key={preset.preset_id} value={preset.preset_id}>{preset.model.name}</option>)}
+            {presets.data.map((preset) => <option key={preset.preset_id} value={preset.preset_id}>{preset.name || preset.model.name}</option>)}
           </select>
         </label>
         <label>
@@ -221,14 +237,14 @@ export default function App() {
           Model A
           <select value={modelA} onChange={(event) => setModelA(event.target.value)} disabled={!activeVod || activeVod.stt_results.length === 0}>
             <option value="">{activeVod?.stt_results.length ? "選擇 Model A" : "No STT result"}</option>
-            {activeVod?.stt_results.map((result) => <option key={result.preset_id} value={result.preset_id}>{result.model.name}</option>)}
+            {activeVod?.stt_results.map((result) => <option key={result.preset_id} value={result.preset_id}>{result.name || result.model.name}</option>)}
           </select>
         </label>
         <label>
           Model B <span className="optional">optional</span>
           <select value={modelB} onChange={(event) => setModelB(event.target.value)} disabled={!activeVod || activeVod.stt_results.length < 2}>
             <option value="">None</option>
-            {activeVod?.stt_results.filter((result) => result.preset_id !== modelA).map((result) => <option key={result.preset_id} value={result.preset_id}>{result.model.name}</option>)}
+            {activeVod?.stt_results.filter((result) => result.preset_id !== modelA).map((result) => <option key={result.preset_id} value={result.preset_id}>{result.name || result.model.name}</option>)}
           </select>
         </label>
       </section>
@@ -243,7 +259,7 @@ export default function App() {
               <h2>{activeVod?.vod_id ?? "尚未選擇 VOD"}</h2>
             </div>
           </div>
-          <video ref={videoRef} controls playsInline onTimeUpdate={(event) => setCurrentTime(event.currentTarget.currentTime)} onSeeked={(event) => scrollAlignmentToTimestamp(event.currentTarget.currentTime * 1000)} onEnded={handleEnded} />
+          <video ref={videoRef} controls playsInline onTimeUpdate={(event) => setCurrentTime(event.currentTarget.currentTime)} onSeeked={(event) => scrollAlignmentToTimestamp(event.currentTarget.currentTime)} onEnded={handleEnded} />
           {playerError && <p className="player-error">{playerError}</p>}
           {!activeVod && <p className="helper-text">選擇直播間與 VOD 後開始播放。</p>}
           {activeVod && (
@@ -278,24 +294,84 @@ export default function App() {
   );
 }
 
-function AlignmentTable({ alignment, modelA, modelB, onSeek, alignmentTableRef, editing, draft, onDraftChange }: { alignment: Alignment; modelA: string; modelB: string; onSeek: (startMS: number, alignmentRowIndex?: number) => void; alignmentTableRef: RefObject<HTMLDivElement | null>; editing: boolean; draft: GoldenEditSegment[]; onDraftChange: (index: number, field: keyof GoldenEditSegment, value: string) => void }) {
-  const model = (segment: STTSegment) => <button type="button" className="segment-button" onClick={() => onSeek(segment.start_ms)}><span>{formatTime(segment.start_ms / 1000)}–{formatTime(segment.end_ms / 1000)}</span>{segment.text || "(empty)"}</button>;
+function AlignmentTable({
+  alignment,
+  modelA,
+  modelB,
+  onSeek,
+  alignmentTableRef,
+  editing,
+  draft,
+  onDraftChange,
+}: {
+  alignment: Alignment;
+  modelA: string;
+  modelB: string;
+  onSeek: (timestampStr: string, alignmentRowIndex?: number) => void;
+  alignmentTableRef: RefObject<HTMLDivElement | null>;
+  editing: boolean;
+  draft: GoldenEditSegment[];
+  onDraftChange: (index: number, field: "from" | "to" | "text", value: string) => void;
+}) {
+  const model = (segment: STTSegment) => (
+    <button type="button" className="segment-card segment-button segment-card-model" onClick={() => onSeek(segment.timestamps.from)}>
+      <span className="segment-timestamps">{segment.timestamps.from}–{segment.timestamps.to}</span>
+      <span className="segment-text">{segment.text || "(empty)"}</span>
+    </button>
+  );
   let goldenIndex = 0;
   const golden = (row: Alignment["rows"][number], rowIndex: number) => {
-    if (!editing || !row.golden.segment_id) return <button type="button" className="golden-button" onClick={() => onSeek(row.golden.start_ms, rowIndex)}><span>{formatTime(row.golden.start_ms / 1000)}–{formatTime(row.golden.end_ms / 1000)}</span>{row.golden.text || "(empty Golden)"}</button>;
+    if (!editing || !row.golden.segment_id) {
+      return (
+        <button type="button" className="segment-card golden-button segment-card-golden" onClick={() => onSeek(row.golden.timestamps.from, rowIndex)}>
+          <span className="segment-timestamps">{row.golden.timestamps.from}–{row.golden.timestamps.to}</span>
+          <span className="segment-text">{row.golden.text || "(empty Golden)"}</span>
+        </button>
+      );
+    }
     const draftIndex = goldenIndex++;
     const segment = draft[draftIndex] ?? row.golden;
-    return <div className="golden-editor">
-      <div className="time-fields"><input aria-label="Golden start" type="number" value={segment.start_ms} onChange={(event) => onDraftChange(draftIndex, "start_ms", event.target.value)} /><span>–</span><input aria-label="Golden end" type="number" value={segment.end_ms} onChange={(event) => onDraftChange(draftIndex, "end_ms", event.target.value)} /></div>
-      <input aria-label="Golden text" value={segment.text} onChange={(event) => onDraftChange(draftIndex, "text", event.target.value)} />
-    </div>;
+    return (
+      <div className="segment-card golden-editor">
+        <div className="time-fields">
+          <input aria-label="Golden start" value={segment.timestamps.from} onChange={(event) => onDraftChange(draftIndex, "from", event.target.value)} />
+          <span>–</span>
+          <input aria-label="Golden end" value={segment.timestamps.to} onChange={(event) => onDraftChange(draftIndex, "to", event.target.value)} />
+        </div>
+        <input aria-label="Golden text" value={segment.text} onChange={(event) => onDraftChange(draftIndex, "text", event.target.value)} />
+      </div>
+    );
   };
-  return <div className="alignment-table" ref={alignmentTableRef}>
-    <div className="alignment-row alignment-header"><strong>Golden</strong><strong>Model A</strong>{modelB && <strong>Model B</strong>}</div>
-    {alignment.rows.map((row, index) => <div className="alignment-row" data-alignment-row-index={index} data-alignment-start-ms={row.golden.start_ms} data-alignment-end-ms={row.golden.end_ms} key={`${row.golden.segment_id ?? "unmatched"}-${row.golden.start_ms}-${index}`}>
-      {golden(row, index)}
-      <div>{(row.models[modelA] ?? []).map((segment, segmentIndex) => <span key={`${segment.start_ms}-${segmentIndex}`}>{model(segment)}</span>)}</div>
-      {modelB && <div>{(row.models[modelB] ?? []).map((segment, segmentIndex) => <span key={`${segment.start_ms}-${segmentIndex}`}>{model(segment)}</span>)}</div>}
-    </div>)}
-  </div>;
+  return (
+    <div className="alignment-table" ref={alignmentTableRef}>
+      <div className="alignment-row alignment-header">
+        <div className="alignment-cell"><strong>Golden</strong></div>
+        <div className="alignment-cell"><strong>Model A</strong></div>
+        {modelB && <div className="alignment-cell"><strong>Model B</strong></div>}
+      </div>
+      {alignment.rows.map((row, index) => (
+        <div
+          className="alignment-row"
+          data-alignment-row-index={index}
+          data-alignment-start={row.golden.timestamps.from}
+          data-alignment-end={row.golden.timestamps.to}
+          key={`${row.golden.segment_id ?? "unmatched"}-${row.golden.timestamps.from}-${index}`}
+        >
+          <div className="alignment-cell alignment-cell-golden">{golden(row, index)}</div>
+          <div className="alignment-cell alignment-cell-model">
+            {(row.models[modelA] ?? []).map((segment, segmentIndex) => (
+              <span key={`${segment.timestamps.from}-${segmentIndex}`}>{model(segment)}</span>
+            ))}
+          </div>
+          {modelB && (
+            <div className="alignment-cell alignment-cell-model">
+              {(row.models[modelB] ?? []).map((segment, segmentIndex) => (
+                <span key={`${segment.timestamps.from}-${segmentIndex}`}>{model(segment)}</span>
+              ))}
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
 }

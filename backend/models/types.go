@@ -13,6 +13,7 @@ type Model struct {
 
 type Preset struct {
 	PresetID  string    `json:"preset_id"`
+	Name      string    `json:"name,omitempty"`
 	Model     Model     `json:"model"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
@@ -21,6 +22,7 @@ type Preset struct {
 
 type STTResultSummary struct {
 	PresetID  string    `json:"preset_id"`
+	Name      string    `json:"name,omitempty"`
 	Model     Model     `json:"model"`
 	CreatedAt time.Time `json:"created_at"`
 }
@@ -43,25 +45,29 @@ type StreamDetail struct {
 	VODs     []VODSegment `json:"vods"`
 }
 
+type Timestamps struct {
+	From string `json:"from"`
+	To   string `json:"to"`
+}
+
 type STTSegment struct {
-	StartMS int64  `json:"start_ms"`
-	EndMS   int64  `json:"end_ms"`
-	Text    string `json:"text"`
+	Timestamps Timestamps `json:"timestamps"`
+	Text       string     `json:"text"`
 }
 
 type STTResult struct {
 	PresetID  string       `json:"preset_id"`
 	StreamID  string       `json:"stream_id"`
 	VODID     string       `json:"vod_id"`
+	Language  string       `json:"language,omitempty"`
 	CreatedAt time.Time    `json:"created_at"`
 	Segments  []STTSegment `json:"segments"`
 }
 
 type GoldenSegment struct {
-	SegmentID string `json:"segment_id,omitempty"`
-	StartMS   int64  `json:"start_ms"`
-	EndMS     int64  `json:"end_ms"`
-	Text      string `json:"text"`
+	SegmentID  string     `json:"segment_id,omitempty"`
+	Timestamps Timestamps `json:"timestamps"`
+	Text       string     `json:"text"`
 }
 
 type Golden struct {
@@ -104,7 +110,6 @@ type GoldenRequest struct {
 }
 
 type GoldenEditSegment struct {
-	StartMS int64  `json:"start_ms"`
-	EndMS   int64  `json:"end_ms"`
-	Text    string `json:"text"`
+	Timestamps Timestamps `json:"timestamps"`
+	Text       string     `json:"text"`
 }

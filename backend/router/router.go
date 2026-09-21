@@ -238,7 +238,7 @@ func (handler streamHandler) align(context *gin.Context) {
 		if len(validResults) > 0 && selected[0].Error == nil {
 			golden = models.Golden{StreamID: streamID, VODID: vodID, Segments: make([]models.GoldenSegment, 0, len(validResults[0].Segments))}
 			for _, segment := range validResults[0].Segments {
-				golden.Segments = append(golden.Segments, models.GoldenSegment{StartMS: segment.StartMS, EndMS: segment.EndMS, Text: segment.Text})
+				golden.Segments = append(golden.Segments, models.GoldenSegment{Timestamps: segment.Timestamps, Text: segment.Text})
 			}
 		} else {
 			golden = models.Golden{StreamID: streamID, VODID: vodID}
