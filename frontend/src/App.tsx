@@ -314,25 +314,25 @@ function AlignmentTable({
   onDraftChange: (index: number, field: "from" | "to" | "text", value: string) => void;
 }) {
   const model = (segment: STTSegment) => (
-    <button type="button" className="segment-button" onClick={() => onSeek(segment.timestamps.from)}>
-      <span>{segment.timestamps.from}–{segment.timestamps.to}</span>
-      {segment.text || "(empty)"}
+    <button type="button" className="segment-card segment-button segment-card-model" onClick={() => onSeek(segment.timestamps.from)}>
+      <span className="segment-timestamps">{segment.timestamps.from}–{segment.timestamps.to}</span>
+      <span className="segment-text">{segment.text || "(empty)"}</span>
     </button>
   );
   let goldenIndex = 0;
   const golden = (row: Alignment["rows"][number], rowIndex: number) => {
     if (!editing || !row.golden.segment_id) {
       return (
-        <button type="button" className="golden-button" onClick={() => onSeek(row.golden.timestamps.from, rowIndex)}>
-          <span>{row.golden.timestamps.from}–{row.golden.timestamps.to}</span>
-          {row.golden.text || "(empty Golden)"}
+        <button type="button" className="segment-card golden-button segment-card-golden" onClick={() => onSeek(row.golden.timestamps.from, rowIndex)}>
+          <span className="segment-timestamps">{row.golden.timestamps.from}–{row.golden.timestamps.to}</span>
+          <span className="segment-text">{row.golden.text || "(empty Golden)"}</span>
         </button>
       );
     }
     const draftIndex = goldenIndex++;
     const segment = draft[draftIndex] ?? row.golden;
     return (
-      <div className="golden-editor">
+      <div className="segment-card golden-editor">
         <div className="time-fields">
           <input aria-label="Golden start" value={segment.timestamps.from} onChange={(event) => onDraftChange(draftIndex, "from", event.target.value)} />
           <span>–</span>
@@ -345,9 +345,9 @@ function AlignmentTable({
   return (
     <div className="alignment-table" ref={alignmentTableRef}>
       <div className="alignment-row alignment-header">
-        <strong>Golden</strong>
-        <strong>Model A</strong>
-        {modelB && <strong>Model B</strong>}
+        <div className="alignment-cell"><strong>Golden</strong></div>
+        <div className="alignment-cell"><strong>Model A</strong></div>
+        {modelB && <div className="alignment-cell"><strong>Model B</strong></div>}
       </div>
       {alignment.rows.map((row, index) => (
         <div
@@ -357,9 +357,19 @@ function AlignmentTable({
           data-alignment-end={row.golden.timestamps.to}
           key={`${row.golden.segment_id ?? "unmatched"}-${row.golden.timestamps.from}-${index}`}
         >
-          {golden(row, index)}
-          <div>{(row.models[modelA] ?? []).map((segment, segmentIndex) => <span key={`${segment.timestamps.from}-${segmentIndex}`}>{model(segment)}</span>)}</div>
-          {modelB && <div>{(row.models[modelB] ?? []).map((segment, segmentIndex) => <span key={`${segment.timestamps.from}-${segmentIndex}`}>{model(segment)}</span>)}</div>}
+          <div className="alignment-cell alignment-cell-golden">{golden(row, index)}</div>
+          <div className="alignment-cell alignment-cell-model">
+            {(row.models[modelA] ?? []).map((segment, segmentIndex) => (
+              <span key={`${segment.timestamps.from}-${segmentIndex}`}>{model(segment)}</span>
+            ))}
+          </div>
+          {modelB && (
+            <div className="alignment-cell alignment-cell-model">
+              {(row.models[modelB] ?? []).map((segment, segmentIndex) => (
+                <span key={`${segment.timestamps.from}-${segmentIndex}`}>{model(segment)}</span>
+              ))}
+            </div>
+          )}
         </div>
       ))}
     </div>
