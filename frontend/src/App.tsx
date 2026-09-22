@@ -85,19 +85,21 @@ export default function App() {
 
   useEffect(() => {
     const element = videoRef.current;
-    if (!element) return;
+    if (!element || !activeVod) return;
 
     let player: FlvMediaPlayer | undefined;
     let cancelled = false;
-    void import("flv.js").then((flv) => {
+    setPlayerError(undefined);
+    void import("mpegts.js").then(({ default: mpegts }) => {
       if (cancelled) return;
-      player = new FlvMediaPlayer(flv);
+      player = new FlvMediaPlayer(mpegts, (message) => {
+        if (!cancelled) setPlayerError(message);
+      });
       player.attach(element);
-      try {
-        if (!activeVod) return;
-        player.load(activeVod.flv_url);
-        setPlayerError(undefined);
-      } catch (error) {
+      player.load(activeVod.flv_url);
+    }).catch((error) => {
+      if (!cancelled) {
+        player?.destroy();
         setPlayerError(error instanceof Error ? error.message : "Unable to load the VOD.");
       }
     });

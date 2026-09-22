@@ -9,7 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "flv.js": "^1.6.2",
+    "mpegts.js": "^1.8.2",
     "react": "^19.1.1",
     "react-dom": "^19.1.1"
   },
