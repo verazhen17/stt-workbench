@@ -260,8 +260,14 @@ export default function App() {
     if (!videoRef.current) return;
     const timeSec = timestampToSeconds(timestampStr);
     videoRef.current.currentTime = timeSec;
-    void videoRef.current.play().catch(() => {
-      setPlayerError("Autoplay was blocked by browser. Press play to start.");
+    void videoRef.current.play().then(() => {
+      setPlayerError(undefined);
+    }).catch((error: unknown) => {
+      if (error instanceof Error && error.name === "NotAllowedError") {
+        setPlayerError("Autoplay was blocked by browser. Press play to start.");
+      } else if (error instanceof Error && error.name !== "AbortError") {
+        setPlayerError(error.message);
+      }
     });
     const targetIndex = alignmentRowIndex ?? findRowIndexForTimestamp(timeSec) ?? undefined;
     resumeAutoScroll(timeSec, targetIndex);
@@ -366,7 +372,15 @@ export default function App() {
               <h2>{activeVod?.vod_id ?? "No VOD selected"}</h2>
             </div>
           </div>
-          <video ref={videoRef} controls playsInline onTimeUpdate={(event) => handleTimeUpdate(event.currentTarget.currentTime)} onSeeked={(event) => resumeAutoScroll(event.currentTarget.currentTime)} onEnded={handleEnded} />
+          <video
+            ref={videoRef}
+            controls
+            playsInline
+            onPlay={() => setPlayerError(undefined)}
+            onTimeUpdate={(event) => handleTimeUpdate(event.currentTarget.currentTime)}
+            onSeeked={(event) => resumeAutoScroll(event.currentTarget.currentTime)}
+            onEnded={handleEnded}
+          />
           {playerError && <p className="player-error">{playerError}</p>}
           {!activeVod && <p className="helper-text">Select a stream and VOD to begin playback.</p>}
           {activeVod && (

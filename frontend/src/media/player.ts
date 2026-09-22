@@ -47,7 +47,13 @@ export class FlvMediaPlayer implements MediaPlayer {
       },
       {
         enableWorker: false,
-        lazyLoad: false,
+        lazyLoad: true,
+        lazyLoadMaxDuration: 3 * 60,
+        lazyLoadRecoverDuration: 30,
+        deferLoadAfterSourceOpen: true,
+        autoCleanupSourceBuffer: true,
+        autoCleanupMaxBackwardDuration: 2 * 60,
+        autoCleanupMinBackwardDuration: 60,
         seekType: "range",
       }
     );
