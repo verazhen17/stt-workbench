@@ -36,16 +36,17 @@ export class FlvMediaPlayer implements MediaPlayer {
     if (!this.mpegts.isSupported()) {
       throw new Error("This browser does not support MSE / FLV playback.");
     }
+    const resolvedUrl = typeof window !== "undefined" ? new URL(source, window.location.href).href : source;
     this.player = this.mpegts.createPlayer(
       {
         type: "flv",
-        url: source,
+        url: resolvedUrl,
         isLive: false,
         hasAudio: true,
         hasVideo: true,
       },
       {
-        enableWorker: true,
+        enableWorker: false,
         lazyLoad: false,
         seekType: "range",
       }
