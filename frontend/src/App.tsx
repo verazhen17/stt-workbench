@@ -89,9 +89,12 @@ export default function App() {
 
     let player: FlvMediaPlayer | undefined;
     let cancelled = false;
-    void import("flv.js").then((flv) => {
+    void import("mpegts.js").then((mod) => {
       if (cancelled) return;
-      player = new FlvMediaPlayer(flv);
+      const mpegts = mod.default || mod;
+      player = new FlvMediaPlayer(mpegts, (error) => {
+        setPlayerError(error.message);
+      });
       player.attach(element);
       try {
         if (!activeVod) return;

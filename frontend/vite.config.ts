@@ -17,10 +17,29 @@ export default defineConfig({
           const filePath = resolve(vodRoot, `.${requestPath}`);
           if (relative(vodRoot, filePath).startsWith("..")) return next();
           try {
-            if (!statSync(filePath).isFile()) return next();
-            response.setHeader("Cache-Control", "no-cache");
-            response.setHeader("Content-Type", filePath.endsWith(".flv") ? "video/x-flv" : "audio/wav");
-            createReadStream(filePath).pipe(response);
+            const stat = statSync(filePath);
+            if (!stat.isFile()) return next();
+            const contentType = filePath.endsWith(".flv") ? "video/x-flv" : "audio/wav";
+            const range = request.headers.range;
+            if (range) {
+              const parts = range.replace(/bytes=/, "").split("-");
+              const start = parseInt(parts[0], 10);
+              const end = parts[1] ? parseInt(parts[1], 10) : stat.size - 1;
+              response.writeHead(206, {
+                "Content-Range": `bytes ${start}-${end}/${stat.size}`,
+                "Accept-Ranges": "bytes",
+                "Content-Length": end - start + 1,
+                "Content-Type": contentType,
+                "Cache-Control": "no-cache",
+              });
+              createReadStream(filePath, { start, end }).pipe(response);
+            } else {
+              response.setHeader("Accept-Ranges", "bytes");
+              response.setHeader("Content-Length", stat.size);
+              response.setHeader("Cache-Control", "no-cache");
+              response.setHeader("Content-Type", contentType);
+              createReadStream(filePath).pipe(response);
+            }
           } catch {
             next();
           }
