@@ -410,7 +410,7 @@ export default function App() {
                   ▶ Resume Auto-scroll
                 </button>
               )}
-              {alignment.data && (
+              {alignment.data && !editingGolden && (
                 <button
                   type="button"
                   title="Clicking this button will copy the Baseline model's results into Golden."
@@ -420,18 +420,21 @@ export default function App() {
                   {goldenSaving ? "Saving…" : "Overwrite Golden by Baseline"}
                 </button>
               )}
-              {alignment.data && (
-                <button
-                  type="button"
-                  title="Clears the text of all Golden segments."
-                  onClick={clearGolden}
-                  disabled={goldenSaving || (!canEditGolden && !modelA)}
-                >
-                  {goldenSaving ? "Saving…" : "Clear Golden"}
-                </button>
-              )}
               {canEditGolden && !editingGolden && <button type="button" onClick={startGoldenEdit} disabled={goldenSaving}>Edit</button>}
-              {editingGolden && <><button type="button" onClick={saveGoldenEdits} disabled={goldenSaving}>{goldenSaving ? "Saving…" : "Save"}</button><button type="button" onClick={() => setEditingGolden(false)} disabled={goldenSaving}>Cancel</button></>}
+              {editingGolden && (
+                <>
+                  <button
+                    type="button"
+                    title="Clears the text of all Golden segments."
+                    onClick={clearGolden}
+                    disabled={goldenSaving}
+                  >
+                    Clear Golden
+                  </button>
+                  <button type="button" onClick={saveGoldenEdits} disabled={goldenSaving}>{goldenSaving ? "Saving…" : "Save"}</button>
+                  <button type="button" onClick={() => setEditingGolden(false)} disabled={goldenSaving}>Cancel</button>
+                </>
+              )}
             </div>
           </div>
           {alignment.error && <p className="global-message">{alignment.error.message}</p>}
