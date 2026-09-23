@@ -1,0 +1,68 @@
+{
+  "stream_id": "215113227",
+  "vod_id": "1785939256_000",
+  "base_preset_id": "550e8400-e29b-41d4-a716-446655440000",
+  "updated_at": "2026-09-01T09:24:32.250065Z",
+  "segments": [
+    {
+      "segment_id": "golden_001",
+      "start_ms": 9740,
+      "end_ms": 11400,
+      "text": "ねえ、どう。"
+    },
+    {
+      "segment_id": "golden_002",
+      "start_ms": 11400,
+      "end_ms": 13180,
+      "text": "おかえり。"
+    },
+    {
+      "segment_id": "golden_003",
+      "start_ms": 13180,
+      "end_ms": 16850,
+      "text": "ねぇ、ごめんね連発なんなんやろう。"
+    },
+    {
+      "segment_id": "golden_004",
+      "start_ms": 16850,
+      "end_ms": 21030,
+      "text": "なんかアップデートしてみた。"
+    },
+    {
+      "segment_id": "golden_005",
+      "start_ms": 21030,
+      "end_ms": 24700,
+      "text": "もちもちくん、ありがとう。"
+    },
+    {
+      "segment_id": "golden_006",
+      "start_ms": 24700,
+      "end_ms": 32430,
+      "text": "なんかアップデートしてみた。"
+    },
+    {
+      "segment_id": "golden_007",
+      "start_ms": 32430,
+      "end_ms": 41060,
+      "text": "アップデートってあった。"
+    },
+    {
+      "segment_id": "golden_008",
+      "start_ms": 41060,
+      "end_ms": 42780,
+      "text": "まち君おかえり。"
+    },
+    {
+      "segment_id": "golden_009",
+      "start_ms": 42780,
+      "end_ms": 55120,
+      "text": "ねぇ、せっかくみんな応援してくれとったのに。"
+    },
+    {
+      "segment_id": "golden_010",
+      "start_ms": 55120,
+      "end_ms": 60000,
+      "text": "ねぇ、せっかくみんなアップデートが原因。"
+    }
+  ]
+}
