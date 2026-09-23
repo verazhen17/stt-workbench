@@ -39,10 +39,9 @@ func TestGoldenJSONHasVODIDAndNoVersion(t *testing.T) {
 		UpdatedAt:    time.Now().UTC(),
 		Segments: []models.GoldenSegment{
 			{
-				SegmentID: "golden_001",
-				StartMS:   0,
-				EndMS:     5000,
-				Text:      "hello",
+				SegmentID:  "golden_001",
+				Timestamps: models.Timestamps{From: "00:00:00.000", To: "00:00:05.000"},
+				Text:       "hello",
 			},
 		},
 	}

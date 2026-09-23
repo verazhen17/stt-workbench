@@ -3,29 +3,71 @@ package domain
 import (
 	"errors"
 	"fmt"
+	"math"
+	"regexp"
 	"sort"
+	"strconv"
 
 	"github.com/17media/stt-workbench/backend/models"
 )
 
 var ErrSegmentsInvalid = errors.New("invalid STT segments")
 
+var timestampPattern = regexp.MustCompile(`^(\d{2,}):([0-5]\d):([0-5]\d)\.(\d{3})$`)
+
+func parseTimestampMS(value string) (int64, error) {
+	parts := timestampPattern.FindStringSubmatch(value)
+	if parts == nil {
+		return 0, fmt.Errorf("timestamp %q must use HH:MM:SS.mmm", value)
+	}
+	hours, err := strconv.ParseInt(parts[1], 10, 64)
+	if err != nil {
+		return 0, fmt.Errorf("timestamp %q has invalid hours: %w", value, err)
+	}
+	minutes, _ := strconv.ParseInt(parts[2], 10, 64)
+	seconds, _ := strconv.ParseInt(parts[3], 10, 64)
+	milliseconds, _ := strconv.ParseInt(parts[4], 10, 64)
+	remainder := minutes*60_000 + seconds*1_000 + milliseconds
+	if hours > (math.MaxInt64-remainder)/3_600_000 {
+		return 0, fmt.Errorf("timestamp %q is too large", value)
+	}
+	return hours*3_600_000 + remainder, nil
+}
+
+func parseInterval(from, to string) (int64, int64, error) {
+	start, err := parseTimestampMS(from)
+	if err != nil {
+		return 0, 0, err
+	}
+	end, err := parseTimestampMS(to)
+	if err != nil {
+		return 0, 0, err
+	}
+	if end <= start {
+		return 0, 0, errors.New("end must be after start")
+	}
+	return start, end, nil
+}
+
 func ValidateGoldenSegments(segments []models.GoldenSegment) error {
+	var previousEnd int64
 	for index, segment := range segments {
-		if segment.StartMS < 0 || segment.EndMS <= segment.StartMS {
-			return fmt.Errorf("%w: Golden segment %d has invalid interval", ErrGoldenInvalid, index)
+		start, end, err := parseInterval(segment.Timestamps.From, segment.Timestamps.To)
+		if err != nil {
+			return fmt.Errorf("%w: Golden segment %d has invalid interval: %v", ErrGoldenInvalid, index, err)
 		}
-		if index > 0 && segment.StartMS < segments[index-1].EndMS {
+		if index > 0 && start < previousEnd {
 			return fmt.Errorf("%w: Golden segments overlap at %d", ErrGoldenInvalid, index)
 		}
+		previousEnd = end
 	}
 	return nil
 }
 
 func ValidateSTTSegments(segments []models.STTSegment) error {
 	for index, segment := range segments {
-		if segment.StartMS < 0 || segment.EndMS <= segment.StartMS {
-			return fmt.Errorf("%w: segment %d has invalid interval", ErrSegmentsInvalid, index)
+		if _, _, err := parseInterval(segment.Timestamps.From, segment.Timestamps.To); err != nil {
+			return fmt.Errorf("%w: segment %d has invalid interval: %v", ErrSegmentsInvalid, index, err)
 		}
 	}
 	return nil
@@ -50,14 +92,15 @@ func Align(golden models.Golden, results []models.STTResult) ([]models.Alignment
 	}
 	rows := make([]row, 0, len(golden.Segments))
 	for index, segment := range golden.Segments {
+		start, end, _ := parseInterval(segment.Timestamps.From, segment.Timestamps.To)
 		modelsByPreset := make(map[string][]models.STTSegment, len(results))
 		for _, result := range results {
 			modelsByPreset[result.PresetID] = []models.STTSegment{}
 		}
 		rows = append(rows, row{
 			alignment: models.AlignmentRow{Golden: segment, Models: modelsByPreset},
-			start:     segment.StartMS,
-			end:       segment.EndMS,
+			start:     start,
+			end:       end,
 			order:     -1,
 			sequence:  index,
 		})
@@ -65,9 +108,11 @@ func Align(golden models.Golden, results []models.STTResult) ([]models.Alignment
 
 	for resultIndex, result := range results {
 		for segmentIndex, segment := range result.Segments {
+			segmentStart, segmentEnd, _ := parseInterval(segment.Timestamps.From, segment.Timestamps.To)
 			owner := -1
 			for index, goldenSegment := range golden.Segments {
-				if segment.StartMS >= goldenSegment.StartMS && segment.StartMS < goldenSegment.EndMS {
+				goldenStart, goldenEnd, _ := parseInterval(goldenSegment.Timestamps.From, goldenSegment.Timestamps.To)
+				if segmentStart >= goldenStart && segmentStart < goldenEnd {
 					owner = index
 					break
 				}
@@ -83,11 +128,11 @@ func Align(golden models.Golden, results []models.STTResult) ([]models.Alignment
 			modelsByPreset[result.PresetID] = []models.STTSegment{segment}
 			rows = append(rows, row{
 				alignment: models.AlignmentRow{
-					Golden: models.GoldenSegment{StartMS: segment.StartMS, EndMS: segment.EndMS},
+					Golden: models.GoldenSegment{Timestamps: segment.Timestamps},
 					Models: modelsByPreset,
 				},
-				start:    segment.StartMS,
-				end:      segment.EndMS,
+				start:    segmentStart,
+				end:      segmentEnd,
 				order:    resultIndex,
 				sequence: segmentIndex,
 			})

@@ -5,6 +5,7 @@ export type ModelConfig = {
 
 export type Preset = {
   preset_id: string;
+  name?: string;
   model: ModelConfig;
   created_at: string;
   updated_at: string;
@@ -15,6 +16,7 @@ export type Stream = { stream_id: string };
 
 export type STTResultSummary = {
   preset_id: string;
+  name?: string;
   model: ModelConfig;
   created_at: string;
 };
@@ -34,7 +36,8 @@ export type VOD = {
 
 export type StreamDetail = { stream_id: string; vods: VOD[] };
 
-export type STTSegment = { start_ms: number; end_ms: number; text: string };
+export type Timestamps = { from: string; to: string };
+export type STTSegment = { timestamps: Timestamps; text: string };
 export type GoldenSegment = STTSegment & { segment_id?: string };
 export type GoldenEditSegment = STTSegment;
 export type Golden = {

@@ -30,7 +30,7 @@ func TestGoldenServiceRenewAndEdit(t *testing.T) {
 	store := domain.NewFilesystemGoldenStore(os.DirFS(root), root)
 	service := domain.NewGoldenService(store, goldenResultProvider{
 		result: models.STTResult{PresetID: presetA, StreamID: streamA, VODID: vodA, Segments: []models.STTSegment{
-			{StartMS: 0, EndMS: 1000, Text: "hello"},
+			{Timestamps: models.Timestamps{From: "00:00:00.000", To: "00:00:01.000"}, Text: "hello"},
 		}},
 		preset: models.Preset{PresetID: presetA},
 	})
@@ -43,7 +43,7 @@ func TestGoldenServiceRenewAndEdit(t *testing.T) {
 		t.Fatalf("Renew() = %#v, want lineage and stable segment ID", created)
 	}
 
-	edited, err := service.Edit(context.Background(), streamA, vodA, []models.GoldenEditSegment{{StartMS: 10, EndMS: 900, Text: "edited"}})
+	edited, err := service.Edit(context.Background(), streamA, vodA, []models.GoldenEditSegment{{Timestamps: models.Timestamps{From: "00:00:00.010", To: "00:00:00.900"}, Text: "edited"}})
 	if err != nil {
 		t.Fatalf("Edit() error = %v", err)
 	}
@@ -64,16 +64,16 @@ func TestGoldenServiceRejectsOverlapAndSegmentCountChange(t *testing.T) {
 	store := domain.NewFilesystemGoldenStore(os.DirFS(root), root)
 	if err := store.Save(context.Background(), models.Golden{
 		StreamID: streamA, VODID: vodA, BasePresetID: presetA,
-		Segments: []models.GoldenSegment{{SegmentID: "g1", StartMS: 0, EndMS: 1000, Text: "one"}, {SegmentID: "g2", StartMS: 1200, EndMS: 2000, Text: "two"}},
+		Segments: []models.GoldenSegment{{SegmentID: "g1", Timestamps: models.Timestamps{From: "00:00:00.000", To: "00:00:01.000"}, Text: "one"}, {SegmentID: "g2", Timestamps: models.Timestamps{From: "00:00:01.200", To: "00:00:02.000"}, Text: "two"}},
 	}); err != nil {
 		t.Fatalf("Save() error = %v", err)
 	}
 	service := domain.NewGoldenService(store, goldenResultProvider{})
-	_, err := service.Edit(context.Background(), streamA, vodA, []models.GoldenEditSegment{{StartMS: 0, EndMS: 1500, Text: "one"}, {StartMS: 1000, EndMS: 2000, Text: "two"}})
+	_, err := service.Edit(context.Background(), streamA, vodA, []models.GoldenEditSegment{{Timestamps: models.Timestamps{From: "00:00:00.000", To: "00:00:01.500"}, Text: "one"}, {Timestamps: models.Timestamps{From: "00:00:01.000", To: "00:00:02.000"}, Text: "two"}})
 	if !errors.Is(err, domain.ErrGoldenInvalid) {
 		t.Fatalf("Edit() overlap error = %v, want ErrGoldenInvalid", err)
 	}
-	_, err = service.Edit(context.Background(), streamA, vodA, []models.GoldenEditSegment{{StartMS: 0, EndMS: 1000, Text: "one"}})
+	_, err = service.Edit(context.Background(), streamA, vodA, []models.GoldenEditSegment{{Timestamps: models.Timestamps{From: "00:00:00.000", To: "00:00:01.000"}, Text: "one"}})
 	if !errors.Is(err, domain.ErrGoldenInvalid) {
 		t.Fatalf("Edit() count error = %v, want ErrGoldenInvalid", err)
 	}
