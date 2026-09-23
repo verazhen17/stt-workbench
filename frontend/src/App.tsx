@@ -68,8 +68,12 @@ export default function App() {
 
   useEffect(() => {
     const resultIds = activeVod?.stt_results.map((result) => result.preset_id) ?? [];
-    setModelA((current) => resultIds.includes(current) ? current : resultIds[0] ?? "");
-    setModelB((current) => resultIds.includes(current) && current !== resultIds[0] ? current : "");
+    let nextA = "";
+    setModelA((current) => {
+      nextA = resultIds.includes(current) ? current : resultIds[0] ?? "";
+      return nextA;
+    });
+    setModelB((current) => (resultIds.includes(current) && current !== nextA ? current : ""));
   }, [activeVod]);
 
   useEffect(() => {
@@ -77,9 +81,12 @@ export default function App() {
       setAlignment({ loading: false });
       return;
     }
+    const candidateId = modelB && modelB !== modelA ? modelB : undefined;
+    const presetIds = candidateId ? [modelA, candidateId] : [modelA];
+
     let cancelled = false;
     setAlignment({ loading: true });
-    void api.getAlignment(streamId, activeVod.vod_id, [modelA, ...(modelB ? [modelB] : [])]).then((data) => {
+    void api.getAlignment(streamId, activeVod.vod_id, presetIds).then((data) => {
       if (!cancelled) setAlignment({ data, loading: false });
     }).catch((error) => {
       if (!cancelled) setAlignment({ loading: false, error: error instanceof Error ? error : new Error("Unable to load alignment.") });
@@ -124,6 +131,13 @@ export default function App() {
     setEditingGolden(false);
     setGoldenDraft([]);
   }, [activeVod?.vod_id]);
+
+  const handleBaselineChange = (nextModelA: string) => {
+    setModelA(nextModelA);
+    if (nextModelA && nextModelA === modelB) {
+      setModelB("");
+    }
+  };
 
   const selectRelativeVod = (offset: number) => {
     const vods = detail.data?.vods ?? [];
@@ -348,7 +362,7 @@ export default function App() {
         </label>
         <label>
           Baseline Model (Control)
-          <select value={modelA} onChange={(event) => setModelA(event.target.value)} disabled={!activeVod || activeVod.stt_results.length === 0}>
+          <select value={modelA} onChange={(event) => handleBaselineChange(event.target.value)} disabled={!activeVod || activeVod.stt_results.length === 0}>
             <option value="">{activeVod?.stt_results.length ? "Select Baseline Model" : "No STT result"}</option>
             {activeVod?.stt_results.map((result) => <option key={result.preset_id} value={result.preset_id}>{result.name || result.model.name}</option>)}
           </select>

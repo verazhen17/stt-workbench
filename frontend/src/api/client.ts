@@ -39,7 +39,8 @@ export const api = {
   getStreamDetail: (streamId: string) =>
     request<StreamDetail>(`/api/streams/${encodeURIComponent(streamId)}`),
   getAlignment: (streamId: string, vodId: string, presetIds: string[]) => {
-    const query = new URLSearchParams({ vod_id: vodId, preset_ids: presetIds.join(",") });
+    const uniquePresetIds = Array.from(new Set(presetIds.filter(Boolean)));
+    const query = new URLSearchParams({ vod_id: vodId, preset_ids: uniquePresetIds.join(",") });
     return request<Alignment>(`/api/streams/${encodeURIComponent(streamId)}/align?${query}`);
   },
   renewGolden: (streamId: string, vodId: string, sourcePresetId: string) =>
