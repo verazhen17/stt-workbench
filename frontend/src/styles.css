@@ -33,14 +33,18 @@ video { display: block; width: 100%; max-width: 420px; aspect-ratio: 9 / 16; mar
 .empty-state { display: grid; place-items: center; min-height: 360px; color: #87908a; text-align: center; }
 .empty-icon { display: grid; place-items: center; width: 52px; height: 52px; margin-bottom: 16px; border-radius: 50%; color: #a35b42; background: #f3e4db; font-size: 24px; }
 .alignment-table { max-height: calc(100vh - 280px); overflow: auto; margin-top: 24px; border: 1px solid #e3ded4; border-radius: 12px; }
-.alignment-row { display: grid; grid-template-columns: minmax(180px, .8fr) minmax(180px, 1fr) minmax(180px, 1fr); min-width: 560px; border-top: 1px solid #e9e4da; }
+.alignment-row { display: grid; grid-template-columns: minmax(180px, .8fr) minmax(180px, 1fr) minmax(180px, 1fr); min-width: 560px; border-top: 1px solid #e9e4da; transition: background-color .15s ease; }
 .alignment-row:first-child { border-top: 0; }
+.alignment-row-active { background-color: rgba(223, 185, 88, 0.14); box-shadow: inset 4px 0 0 #dfb958; }
 .alignment-cell { min-width: 0; padding: 12px 14px; display: flex; flex-direction: column; }
 .alignment-header { position: sticky; top: 0; z-index: 1; color: #87908a; background: #f8f5ee; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; }
 .alignment-header .alignment-cell { font-weight: 700; }
+.header-preset-name { margin-top: 4px; font-size: 11px; font-weight: 500; letter-spacing: normal; text-transform: none; color: #41675c; word-break: break-word; }
 .alignment-actions { display: flex; align-items: center; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
 .alignment-actions button { padding: 7px 10px; border: 1px solid #d7d0c4; border-radius: 8px; color: #41675c; background: #f8f5ee; cursor: pointer; font-size: 12px; }
 .alignment-actions button:disabled { color: #b8b5ad; cursor: not-allowed; }
+.resume-scroll-button { background: #fdf6e2 !important; border-color: #dfb958 !important; color: #8c6a1e !important; font-weight: 600; }
+.resume-scroll-button:hover { background: #f8eece !important; border-color: #d1a83e !important; }
 
 .segment-card { display: flex; width: 100%; box-sizing: border-box; flex-direction: column; gap: 5px; padding: 9px 12px; border: 1px solid transparent; border-left-width: 4px; border-radius: 6px; color: #344440; text-align: left; cursor: pointer; line-height: 1.45; margin: 0 0 10px 0; font-family: inherit; font-size: 13px; transition: background-color .15s ease, border-color .15s ease; }
 .segment-card:last-child { margin-bottom: 0; }

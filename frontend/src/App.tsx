@@ -39,6 +39,10 @@ export default function App() {
   const [editingGolden, setEditingGolden] = useState(false);
   const [goldenDraft, setGoldenDraft] = useState<GoldenEditSegment[]>([]);
   const [goldenSaving, setGoldenSaving] = useState(false);
+  const [activeRowIndex, setActiveRowIndex] = useState<number | null>(null);
+  const activeRowIndexRef = useRef<number | null>(null);
+  const [isAutoScrollPaused, setIsAutoScrollPaused] = useState(false);
+  const isAutoScrollPausedRef = useRef(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const alignmentTableRef = useRef<HTMLDivElement>(null);
   const activeVod = detail.data?.vods.find((vod) => vod.vod_id === vodId) ?? detail.data?.vods[0];
@@ -89,9 +93,12 @@ export default function App() {
 
     let player: FlvMediaPlayer | undefined;
     let cancelled = false;
-    void import("flv.js").then((flv) => {
+    void import("mpegts.js").then((mod) => {
       if (cancelled) return;
-      player = new FlvMediaPlayer(flv);
+      const mpegts = mod.default || mod;
+      player = new FlvMediaPlayer(mpegts, (error) => {
+        setPlayerError(error.message);
+      });
       player.attach(element);
       try {
         if (!activeVod) return;
@@ -110,6 +117,10 @@ export default function App() {
 
   useEffect(() => {
     setCurrentTime(0);
+    setActiveRowIndex(null);
+    activeRowIndexRef.current = null;
+    setIsAutoScrollPaused(false);
+    isAutoScrollPausedRef.current = false;
     setEditingGolden(false);
     setGoldenDraft([]);
   }, [activeVod?.vod_id]);
@@ -125,6 +136,7 @@ export default function App() {
   const canEditGolden = Boolean(persistedGolden?.length);
   const startGoldenEdit = () => {
     if (!persistedGolden) return;
+    pauseAutoScroll();
     setGoldenDraft(persistedGolden.map((row) => ({ timestamps: { ...row.golden.timestamps }, text: row.golden.text })));
     setEditingGolden(true);
   };
@@ -171,29 +183,104 @@ export default function App() {
       setGoldenSaving(false);
     }
   };
+  const clearGolden = async () => {
+    if (!streamId || !activeVod || !alignment.data || alignment.data.rows.length === 0) return;
+    if (editingGolden) {
+      setGoldenDraft((current) => current.map((segment) => ({ ...segment, text: "" })));
+      return;
+    }
+    setGoldenSaving(true);
+    try {
+      if (!canEditGolden) {
+        if (!modelA) return;
+        await api.renewGolden(streamId, activeVod.vod_id, modelA);
+      }
+      const baseRows = alignment.data.rows;
+      const segmentsToClear = baseRows.map((row) => ({
+        timestamps: { ...row.golden.timestamps },
+        text: "",
+      }));
+      await api.editGolden(streamId, activeVod.vod_id, segmentsToClear);
+      setAlignmentRevision((revision) => revision + 1);
+    } catch (error) {
+      setAlignment({ data: alignment.data, loading: false, error: error instanceof Error ? error : new Error("Unable to clear Golden.") });
+    } finally {
+      setGoldenSaving(false);
+    }
+  };
+
+  const pauseAutoScroll = () => {
+    if (!isAutoScrollPausedRef.current) {
+      isAutoScrollPausedRef.current = true;
+      setIsAutoScrollPaused(true);
+    }
+  };
+
+  const resumeAutoScroll = (seekTimestamp?: number, targetIndex?: number) => {
+    isAutoScrollPausedRef.current = false;
+    setIsAutoScrollPaused(false);
+    if (targetIndex !== undefined) {
+      activeRowIndexRef.current = targetIndex;
+      setActiveRowIndex(targetIndex);
+      scrollAlignmentToRow(targetIndex, "auto");
+    } else if (seekTimestamp !== undefined) {
+      scrollAlignmentToTimestamp(seekTimestamp, "auto");
+    } else if (videoRef.current) {
+      scrollAlignmentToTimestamp(videoRef.current.currentTime, "smooth");
+    }
+  };
+
+  const findRowIndexForTimestamp = (currentTimeSec: number): number | null => {
+    const rows = alignment.data?.rows;
+    if (!rows || rows.length === 0) return null;
+
+    for (let i = 0; i < rows.length; i += 1) {
+      const start = timestampToSeconds(rows[i].golden.timestamps.from);
+      const end = timestampToSeconds(rows[i].golden.timestamps.to);
+      if (currentTimeSec >= start && currentTimeSec < end) {
+        return i;
+      }
+    }
+
+    const firstStart = timestampToSeconds(rows[0].golden.timestamps.from);
+    if (currentTimeSec < firstStart) {
+      return null;
+    }
+
+    for (let i = rows.length - 1; i >= 0; i -= 1) {
+      const start = timestampToSeconds(rows[i].golden.timestamps.from);
+      if (currentTimeSec >= start) {
+        return i;
+      }
+    }
+    return null;
+  };
+
   const seekTo = (timestampStr: string, alignmentRowIndex?: number) => {
     if (!videoRef.current) return;
-    videoRef.current.currentTime = timestampToSeconds(timestampStr);
-    void videoRef.current.play().catch(() => {
-      setPlayerError("瀏覽器阻擋自動播放，請按播放鍵繼續。");
+    const timeSec = timestampToSeconds(timestampStr);
+    videoRef.current.currentTime = timeSec;
+    void videoRef.current.play().then(() => {
+      setPlayerError(undefined);
+    }).catch((error: unknown) => {
+      if (error instanceof Error && error.name === "NotAllowedError") {
+        setPlayerError("Autoplay was blocked by browser. Press play to start.");
+      } else if (error instanceof Error && error.name !== "AbortError") {
+        setPlayerError(error.message);
+      }
     });
-    if (alignmentRowIndex === undefined) return;
-    scrollAlignmentToRow(alignmentRowIndex);
+    const targetIndex = alignmentRowIndex ?? findRowIndexForTimestamp(timeSec) ?? undefined;
+    resumeAutoScroll(timeSec, targetIndex);
   };
-  const scrollAlignmentToTimestamp = (currentTimeSec: number) => {
-    const container = alignmentTableRef.current;
-    if (!container) return;
-    const rows = Array.from(container.querySelectorAll<HTMLElement>("[data-alignment-row-index]"));
-    const matchingRow = rows.find((row) => {
-      const start = timestampToSeconds(row.dataset.alignmentStart ?? "00:00:00.000");
-      const end = timestampToSeconds(row.dataset.alignmentEnd ?? "00:00:00.000");
-      return currentTimeSec >= start && currentTimeSec < end;
-    });
-    const nextRow = rows.find((row) => currentTimeSec < timestampToSeconds(row.dataset.alignmentStart ?? "00:00:00.000"));
-    const row = matchingRow ?? nextRow ?? rows.at(-1);
-    if (row) scrollAlignmentToRow(Number(row.dataset.alignmentRowIndex));
+
+  const scrollAlignmentToTimestamp = (currentTimeSec: number, behavior: ScrollBehavior = "auto") => {
+    const targetIndex = findRowIndexForTimestamp(currentTimeSec) ?? 0;
+    activeRowIndexRef.current = targetIndex;
+    setActiveRowIndex(targetIndex);
+    scrollAlignmentToRow(targetIndex, behavior);
   };
-  const scrollAlignmentToRow = (alignmentRowIndex: number) => {
+
+  const scrollAlignmentToRow = (alignmentRowIndex: number, behavior: ScrollBehavior = "auto") => {
     requestAnimationFrame(() => {
       const row = alignmentTableRef.current?.querySelector<HTMLElement>(`[data-alignment-row-index="${alignmentRowIndex}"]`);
       const container = alignmentTableRef.current;
@@ -203,18 +290,44 @@ export default function App() {
         0,
         row.getBoundingClientRect().top - container.getBoundingClientRect().top + container.scrollTop - (header?.offsetHeight ?? 0),
       );
-      container.scrollTo({ top: targetTop, behavior: "auto" });
+      container.scrollTo({ top: targetTop, behavior });
     });
   };
 
-  const catalogMessage = streams.error?.message ?? (streams.loading ? "Loading streams…" : streams.data.length === 0 ? "目前沒有可用的直播間。" : undefined);
+  const handleTimeUpdate = (currentTimeSec: number) => {
+    setCurrentTime(currentTimeSec);
+    const newActiveIndex = findRowIndexForTimestamp(currentTimeSec);
+    if (newActiveIndex !== activeRowIndexRef.current) {
+      activeRowIndexRef.current = newActiveIndex;
+      setActiveRowIndex(newActiveIndex);
+      if (!isAutoScrollPausedRef.current && !editingGolden && newActiveIndex !== null) {
+        scrollAlignmentToRow(newActiveIndex, "smooth");
+      }
+    }
+  };
+
+  const getPresetName = (presetId: string): string => {
+    if (!presetId) return "";
+    const activeResult = activeVod?.stt_results.find((result) => result.preset_id === presetId);
+    if (activeResult?.name || activeResult?.model?.name) {
+      return activeResult.name || activeResult.model.name;
+    }
+    const preset = presets.data.find((p) => p.preset_id === presetId);
+    if (preset?.name || preset?.model?.name) {
+      return preset.name || preset.model.name;
+    }
+    return presetId;
+  };
+
+  const modelAName = getPresetName(modelA);
+  const modelBName = getPresetName(modelB);
+  const catalogMessage = streams.error?.message ?? (streams.loading ? "Loading streams…" : streams.data.length === 0 ? "No streams available." : undefined);
 
   return (
     <main className="app-shell">
       <header className="app-header">
         <div>
-          <p className="eyebrow">STT WORKBENCH · V1</p>
-          <h1>STT 比較與 Golden 編輯</h1>
+          <h1>STT Comparison & Golden Editor</h1>
         </div>
       </header>
 
@@ -227,21 +340,21 @@ export default function App() {
           </select>
         </label>
         <label>
-          直播間
+          Stream
           <select value={streamId} onChange={(event) => setStreamId(event.target.value)} disabled={streams.loading || streams.data.length === 0}>
-            <option value="">{streams.loading ? "Loading…" : "選擇直播間"}</option>
+            <option value="">{streams.loading ? "Loading…" : "Select stream"}</option>
             {streams.data.map((stream) => <option key={stream.stream_id} value={stream.stream_id}>{stream.stream_id}</option>)}
           </select>
         </label>
         <label>
-          Model A
+          Baseline Model (Control)
           <select value={modelA} onChange={(event) => setModelA(event.target.value)} disabled={!activeVod || activeVod.stt_results.length === 0}>
-            <option value="">{activeVod?.stt_results.length ? "選擇 Model A" : "No STT result"}</option>
+            <option value="">{activeVod?.stt_results.length ? "Select Baseline Model" : "No STT result"}</option>
             {activeVod?.stt_results.map((result) => <option key={result.preset_id} value={result.preset_id}>{result.name || result.model.name}</option>)}
           </select>
         </label>
         <label>
-          Model B <span className="optional">optional</span>
+          Candidate Model (Experimental) <span className="optional">optional</span>
           <select value={modelB} onChange={(event) => setModelB(event.target.value)} disabled={!activeVod || activeVod.stt_results.length < 2}>
             <option value="">None</option>
             {activeVod?.stt_results.filter((result) => result.preset_id !== modelA).map((result) => <option key={result.preset_id} value={result.preset_id}>{result.name || result.model.name}</option>)}
@@ -256,12 +369,20 @@ export default function App() {
           <div className="panel-heading">
             <div>
               <p className="eyebrow">ACTIVE VOD</p>
-              <h2>{activeVod?.vod_id ?? "尚未選擇 VOD"}</h2>
+              <h2>{activeVod?.vod_id ?? "No VOD selected"}</h2>
             </div>
           </div>
-          <video ref={videoRef} controls playsInline onTimeUpdate={(event) => setCurrentTime(event.currentTarget.currentTime)} onSeeked={(event) => scrollAlignmentToTimestamp(event.currentTarget.currentTime)} onEnded={handleEnded} />
+          <video
+            ref={videoRef}
+            controls
+            playsInline
+            onPlay={() => setPlayerError(undefined)}
+            onTimeUpdate={(event) => handleTimeUpdate(event.currentTarget.currentTime)}
+            onSeeked={(event) => resumeAutoScroll(event.currentTarget.currentTime)}
+            onEnded={handleEnded}
+          />
           {playerError && <p className="player-error">{playerError}</p>}
-          {!activeVod && <p className="helper-text">選擇直播間與 VOD 後開始播放。</p>}
+          {!activeVod && <p className="helper-text">Select a stream and VOD to begin playback.</p>}
           {activeVod && (
             <div className="player-meta">
               <button type="button" onClick={() => selectRelativeVod(-1)} disabled={activeVodIndex <= 0}>← Previous VOD</button>
@@ -275,19 +396,66 @@ export default function App() {
           <div className="panel-heading">
             <div>
               <p className="eyebrow">ALIGNMENT</p>
-              <h2>Golden / Model A / Model B</h2>
+              <h2>Golden / Baseline / Candidate</h2>
             </div>
             <div className="alignment-actions">
               <span className="muted">{alignment.loading ? "Loading…" : alignment.data ? `${alignment.data.rows.length} rows` : "No alignment loaded"}</span>
-              {alignment.data && <button type="button" onClick={renewGolden} disabled={goldenSaving || !modelA}>{goldenSaving ? "Saving…" : "Renew Golden"}</button>}
+              {isAutoScrollPaused && alignment.data && !editingGolden && (
+                <button
+                  type="button"
+                  className="resume-scroll-button"
+                  title="Resume following video playback"
+                  onClick={() => resumeAutoScroll()}
+                >
+                  ▶ Resume Auto-scroll
+                </button>
+              )}
+              {alignment.data && !editingGolden && (
+                <button
+                  type="button"
+                  title="Clicking this button will copy the Baseline model's results into Golden."
+                  onClick={renewGolden}
+                  disabled={goldenSaving || !modelA}
+                >
+                  {goldenSaving ? "Saving…" : "Overwrite Golden by Baseline"}
+                </button>
+              )}
               {canEditGolden && !editingGolden && <button type="button" onClick={startGoldenEdit} disabled={goldenSaving}>Edit</button>}
-              {editingGolden && <><button type="button" onClick={saveGoldenEdits} disabled={goldenSaving}>{goldenSaving ? "Saving…" : "Save"}</button><button type="button" onClick={() => setEditingGolden(false)} disabled={goldenSaving}>Cancel</button></>}
+              {editingGolden && (
+                <>
+                  <button
+                    type="button"
+                    title="Clears the text of all Golden segments."
+                    onClick={clearGolden}
+                    disabled={goldenSaving}
+                  >
+                    Clear Golden
+                  </button>
+                  <button type="button" onClick={saveGoldenEdits} disabled={goldenSaving}>{goldenSaving ? "Saving…" : "Save"}</button>
+                  <button type="button" onClick={() => setEditingGolden(false)} disabled={goldenSaving}>Cancel</button>
+                </>
+              )}
             </div>
           </div>
           {alignment.error && <p className="global-message">{alignment.error.message}</p>}
-          {!alignment.data && !alignment.loading && <div className="empty-state"><span className="empty-icon">↔</span><p>選擇 VOD 與 Model A 後載入 alignment。</p></div>}
-          {alignment.loading && <div className="empty-state"><span className="empty-icon">…</span><p>載入 alignment…</p></div>}
-          {alignment.data && <AlignmentTable alignment={alignment.data} modelA={modelA} modelB={modelB} onSeek={seekTo} alignmentTableRef={alignmentTableRef} editing={editingGolden} draft={goldenDraft} onDraftChange={updateGoldenDraft} />}
+          {!alignment.data && !alignment.loading && <div className="empty-state"><span className="empty-icon">↔</span><p>Select a VOD and Baseline Model to load alignment.</p></div>}
+          {alignment.loading && <div className="empty-state"><span className="empty-icon">…</span><p>Loading alignment…</p></div>}
+          {alignment.data && (
+            <AlignmentTable
+              alignment={alignment.data}
+              modelA={modelA}
+              modelB={modelB}
+              modelAName={modelAName}
+              modelBName={modelBName}
+              onSeek={seekTo}
+              alignmentTableRef={alignmentTableRef}
+              editing={editingGolden}
+              draft={goldenDraft}
+              onDraftChange={updateGoldenDraft}
+              activeRowIndex={activeRowIndex}
+              onUserScroll={pauseAutoScroll}
+            />
+          )}
         </article>
       </section>
     </main>
@@ -298,20 +466,28 @@ function AlignmentTable({
   alignment,
   modelA,
   modelB,
+  modelAName,
+  modelBName,
   onSeek,
   alignmentTableRef,
   editing,
   draft,
   onDraftChange,
+  activeRowIndex,
+  onUserScroll,
 }: {
   alignment: Alignment;
   modelA: string;
   modelB: string;
+  modelAName?: string;
+  modelBName?: string;
   onSeek: (timestampStr: string, alignmentRowIndex?: number) => void;
   alignmentTableRef: RefObject<HTMLDivElement | null>;
   editing: boolean;
   draft: GoldenEditSegment[];
   onDraftChange: (index: number, field: "from" | "to" | "text", value: string) => void;
+  activeRowIndex?: number | null;
+  onUserScroll?: () => void;
 }) {
   const model = (segment: STTSegment) => (
     <button type="button" className="segment-card segment-button segment-card-model" onClick={() => onSeek(segment.timestamps.from)}>
@@ -343,35 +519,53 @@ function AlignmentTable({
     );
   };
   return (
-    <div className="alignment-table" ref={alignmentTableRef}>
+    <div
+      className="alignment-table"
+      ref={alignmentTableRef}
+      onWheel={onUserScroll}
+      onTouchMove={onUserScroll}
+    >
       <div className="alignment-row alignment-header">
-        <div className="alignment-cell"><strong>Golden</strong></div>
-        <div className="alignment-cell"><strong>Model A</strong></div>
-        {modelB && <div className="alignment-cell"><strong>Model B</strong></div>}
-      </div>
-      {alignment.rows.map((row, index) => (
-        <div
-          className="alignment-row"
-          data-alignment-row-index={index}
-          data-alignment-start={row.golden.timestamps.from}
-          data-alignment-end={row.golden.timestamps.to}
-          key={`${row.golden.segment_id ?? "unmatched"}-${row.golden.timestamps.from}-${index}`}
-        >
-          <div className="alignment-cell alignment-cell-golden">{golden(row, index)}</div>
-          <div className="alignment-cell alignment-cell-model">
-            {(row.models[modelA] ?? []).map((segment, segmentIndex) => (
-              <span key={`${segment.timestamps.from}-${segmentIndex}`}>{model(segment)}</span>
-            ))}
+        <div className="alignment-cell">
+          <strong>Golden</strong>
+        </div>
+        <div className="alignment-cell">
+          <strong>Baseline (Control)</strong>
+          {modelAName && <span className="header-preset-name">{modelAName}</span>}
+        </div>
+        {modelB && (
+          <div className="alignment-cell">
+            <strong>Candidate (Experimental)</strong>
+            {modelBName && <span className="header-preset-name">{modelBName}</span>}
           </div>
-          {modelB && (
+        )}
+      </div>
+      {alignment.rows.map((row, index) => {
+        const isActive = activeRowIndex === index;
+        return (
+          <div
+            className={`alignment-row${isActive ? " alignment-row-active" : ""}`}
+            data-alignment-row-index={index}
+            data-alignment-start={row.golden.timestamps.from}
+            data-alignment-end={row.golden.timestamps.to}
+            key={`${row.golden.segment_id ?? "unmatched"}-${row.golden.timestamps.from}-${index}`}
+          >
+            <div className="alignment-cell alignment-cell-golden">{golden(row, index)}</div>
             <div className="alignment-cell alignment-cell-model">
-              {(row.models[modelB] ?? []).map((segment, segmentIndex) => (
+              {(row.models[modelA] ?? []).map((segment, segmentIndex) => (
                 <span key={`${segment.timestamps.from}-${segmentIndex}`}>{model(segment)}</span>
               ))}
             </div>
-          )}
-        </div>
-      ))}
+            {modelB && (
+              <div className="alignment-cell alignment-cell-model">
+                {(row.models[modelB] ?? []).map((segment, segmentIndex) => (
+                  <span key={`${segment.timestamps.from}-${segmentIndex}`}>{model(segment)}</span>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }

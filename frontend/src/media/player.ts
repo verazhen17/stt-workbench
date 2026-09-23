@@ -1,3 +1,5 @@
+import type mpegts from "mpegts.js";
+
 export interface MediaPlayer {
   attach(element: HTMLVideoElement): void;
   load(source: string): void;
@@ -7,15 +9,17 @@ export interface MediaPlayer {
   destroy(): void;
 }
 
-type FlvModule = typeof import("flv.js");
+export type MpegtsModule = typeof mpegts;
 
 export class FlvMediaPlayer implements MediaPlayer {
-  private readonly flv: FlvModule;
-  private player: ReturnType<FlvModule["createPlayer"]> | undefined;
+  private readonly mpegts: MpegtsModule;
+  private player: mpegts.Player | undefined;
   private element: HTMLVideoElement | undefined;
+  private readonly onError?: (error: Error) => void;
 
-  constructor(flv: FlvModule) {
-    this.flv = flv;
+  constructor(mpegts: MpegtsModule, onError?: (error: Error) => void) {
+    this.mpegts = mpegts;
+    this.onError = onError;
   }
 
   attach(element: HTMLVideoElement): void {
@@ -29,10 +33,36 @@ export class FlvMediaPlayer implements MediaPlayer {
     }
     this.player?.destroy();
     this.player = undefined;
-    if (!this.flv.isSupported()) {
-      throw new Error("This browser does not support FLV playback.");
+    if (!this.mpegts.isSupported()) {
+      throw new Error("This browser does not support MSE / FLV playback.");
     }
-    this.player = this.flv.createPlayer({ type: "flv", url: source });
+    const resolvedUrl = typeof window !== "undefined" ? new URL(source, window.location.href).href : source;
+    this.player = this.mpegts.createPlayer(
+      {
+        type: "flv",
+        url: resolvedUrl,
+        isLive: false,
+        hasAudio: true,
+        hasVideo: true,
+      },
+      {
+        enableWorker: false,
+        lazyLoad: true,
+        lazyLoadMaxDuration: 3 * 60,
+        lazyLoadRecoverDuration: 30,
+        deferLoadAfterSourceOpen: true,
+        autoCleanupSourceBuffer: true,
+        autoCleanupMaxBackwardDuration: 2 * 60,
+        autoCleanupMinBackwardDuration: 60,
+        seekType: "range",
+      }
+    );
+    if (this.onError) {
+      const errorHandler = this.onError;
+      this.player.on(this.mpegts.Events.ERROR, (errorType: string, errorDetail: string) => {
+        errorHandler(new Error(`Playback error: ${errorType} (${errorDetail})`));
+      });
+    }
     this.player.attachMediaElement(this.element);
     this.player.load();
   }
