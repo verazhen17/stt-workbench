@@ -1,5 +1,6 @@
 REGISTRY ?= gcr.io/media17-streaming/stt
 IMAGE_TAG ?= $(shell git rev-parse main)
+PLATFORM ?= linux/amd64
 NAMESPACE ?= stag
 KUSTOMIZE_DIR ?= deploy/k8s/overlays/stag
 
@@ -9,8 +10,8 @@ FRONTEND_IMAGE := $(REGISTRY)/workbench-frontend:$(IMAGE_TAG)
 .PHONY: image-build image-push image-release update-deployment deploy help
 
 image-build:
-	docker build -t $(BACKEND_IMAGE) ./backend
-	docker build -t $(FRONTEND_IMAGE) ./frontend
+	docker build --platform $(PLATFORM) -t $(BACKEND_IMAGE) ./backend
+	docker build --platform $(PLATFORM) -t $(FRONTEND_IMAGE) ./frontend
 
 image-push: image-build
 	docker push $(BACKEND_IMAGE)
