@@ -12,6 +12,19 @@ except ImportError:
     AudioSegment = None
 
 
+TRANSCRIPTION_BLACKLIST = (
+    "請不吝點贊訂閱轉發打賞支持明鏡與點點欄目",
+    "请不吝点赞 订阅 转发 打赏支持明镜与点点栏目",
+    "字幕由 Amara.org 社群提供",
+    "优优独播剧场——YoYo Television Series Exclusive",
+    "中文字幕:CaptionCube",
+)
+
+
+def is_blacklisted_transcription(text: str) -> bool:
+    return any(phrase in text for phrase in TRANSCRIPTION_BLACKLIST)
+
+
 def ms_to_time_format(seconds: float) -> str:
     """Format seconds into HH:MM:SS.mmm (matching stt-service TranscriptionOutput)."""
     return time.strftime("%H:%M:%S", time.gmtime(seconds)) + (".%03d" % int((seconds % 1) * 1000))
@@ -128,6 +141,7 @@ def transcribe_audio(
             "text": segment.text,
         }
         for segment in subtitles_all
+        if not is_blacklisted_transcription(segment.text)
     ]
 
     return formatted_segments, detected_language, error

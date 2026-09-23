@@ -9,7 +9,7 @@ from unittest.mock import patch
 from argparse import Namespace
 
 from batch_transcribe import atomic_json_write, build_parser, run_batch
-from whisper import transcribe_audio, ms_to_time_format
+from whisper import is_blacklisted_transcription, ms_to_time_format, transcribe_audio
 
 
 class FakeModel:
@@ -173,6 +173,23 @@ class BatchTranscribeTests(unittest.TestCase):
         segments, lang, err = transcribe_audio("dummy.wav", EmptySequenceModel())
         self.assertEqual(segments, [])
         self.assertIn("No valid speech detected", err)
+
+    def test_whisper_filters_known_hallucination_phrases(self):
+        class HallucinationModel:
+            def transcribe(self, *_args, **_kwargs):
+                return [
+                    SimpleNamespace(start=0, end=1, text="正常內容"),
+                    SimpleNamespace(start=1, end=2, text="前文 字幕由 Amara.org 社群提供"),
+                    SimpleNamespace(start=2, end=3, text="优优独播剧场——YoYo Television Series Exclusive"),
+                ], SimpleNamespace(language="zh")
+
+        segments, _, _ = transcribe_audio("dummy.wav", HallucinationModel())
+        self.assertEqual([segment["text"] for segment in segments], ["正常內容"])
+
+    def test_blacklist_matches_substrings_only(self):
+        self.assertTrue(is_blacklisted_transcription("請不吝點贊訂閱轉發打賞支持明鏡與點點欄目。"))
+        self.assertTrue(is_blacklisted_transcription("中文字幕:CaptionCube"))
+        self.assertFalse(is_blacklisted_transcription("Thank you"))
 
     def test_ms_to_time_format(self):
         self.assertEqual(ms_to_time_format(0), "00:00:00.000")
