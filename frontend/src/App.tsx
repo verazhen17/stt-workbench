@@ -454,7 +454,7 @@ export default function App() {
           {alignment.error && <p className="global-message">{alignment.error.message}</p>}
           {alignment.data?.warnings && alignment.data.warnings.length > 0 && (
             <p className="global-message global-warning">
-              Some Golden timestamps overlap. Please review the highlighted Golden rows ({alignment.data.warnings.length} issue{alignment.data.warnings.length === 1 ? "" : "s"}). Alignment is still available.
+              Golden timestamps overlap. Rows with a red outline contain overlapping timestamps.
             </p>
           )}
           {!alignment.data && !alignment.loading && <div className="empty-state"><span className="empty-icon">↔</span><p>Select a VOD and Baseline Model to load alignment.</p></div>}
