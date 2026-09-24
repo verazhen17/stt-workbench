@@ -36,10 +36,11 @@ class BatchTranscribeTests(unittest.TestCase):
     def add_wav(self, stream_id, name):
         (self.root / stream_id / name).write_bytes(b"test")
 
-    def args(self, stream_ids=None, language="zh"):
+    def args(self, stream_ids=None, language="zh", preset_id=None):
         return Namespace(
             samples_root=self.root,
             preset_name="nightly batch",
+            preset_id=preset_id,
             model="whisper-large-v3",
             stream_ids=stream_ids,
             temperature=0.2,
@@ -203,6 +204,77 @@ class BatchTranscribeTests(unittest.TestCase):
     def test_default_chunk_length_matches_service_configuration(self):
         args = build_parser().parse_args(["--preset-name", "test", "--model", "large-v3"])
         self.assertEqual(args.chunk_length, 5)
+
+    def test_parser_accepts_preset_id(self):
+        args = build_parser().parse_args([
+            "--preset-name", "test",
+            "--model", "large-v3",
+            "--preset-id", "11111111-2222-3333-4444-555555555555"
+        ])
+        self.assertEqual(args.preset_id, "11111111-2222-3333-4444-555555555555")
+
+    def test_specified_preset_id_is_used(self):
+        fixed_id = "11111111-2222-3333-4444-555555555555"
+        self.add_wav("123", "100_000_clip.wav")
+        args = self.args(["123"], preset_id=fixed_id)
+        report = run_batch(args, lambda *_: FakeModel())
+        self.assertEqual(report["preset_id"], fixed_id)
+        self.assertTrue((self.root / "presets" / f"{fixed_id}.json").exists())
+        self.assertTrue((self.root / "123" / f"100_000_{fixed_id}.json").exists())
+
+    def test_resume_skips_already_completed_results(self):
+        fixed_id = "11111111-2222-3333-4444-555555555555"
+        self.add_wav("123", "100_000_clip.wav")
+        self.add_wav("123", "100_001_clip.wav")
+        calls = []
+
+        class TrackingModel(FakeModel):
+            def transcribe(self, wav_path, **options):
+                calls.append(wav_path)
+                return super().transcribe(wav_path, **options)
+
+        # First run: transcribes both files
+        args1 = self.args(["123"], preset_id=fixed_id)
+        report1 = run_batch(args1, lambda *_: TrackingModel())
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(report1["items"][0]["status"], "completed")
+        self.assertEqual(report1["items"][1]["status"], "completed")
+
+        # Second run with same preset_id: should skip already completed files
+        calls.clear()
+        args2 = self.args(["123"], preset_id=fixed_id)
+        report2 = run_batch(args2, lambda *_: TrackingModel())
+        self.assertEqual(len(calls), 0)
+        self.assertTrue(all(item["status"] == "completed" for item in report2["items"]))
+
+    def test_resume_recovers_corrupted_json(self):
+        fixed_id = "11111111-2222-3333-4444-555555555555"
+        self.add_wav("123", "100_000_clip.wav")
+        # Write corrupted / incomplete json
+        corrupted_path = self.root / "123" / f"100_000_{fixed_id}.json"
+        corrupted_path.write_text("{corrupted: json", encoding="utf-8")
+
+        calls = []
+
+        class TrackingModel(FakeModel):
+            def transcribe(self, wav_path, **options):
+                calls.append(wav_path)
+                return super().transcribe(wav_path, **options)
+
+        args = self.args(["123"], preset_id=fixed_id)
+        report = run_batch(args, lambda *_: TrackingModel())
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(report["items"][0]["status"], "completed")
+        # Verify it was overwritten with valid json
+        data = json.loads(corrupted_path.read_text(encoding="utf-8"))
+        self.assertEqual(data["vod_id"], "100_000")
+        self.assertEqual(data["preset_id"], fixed_id)
+
+    def test_invalid_preset_id_raises_value_error(self):
+        args = self.args(["123"], preset_id="not-a-valid-uuid")
+        with self.assertRaises(ValueError) as ctx:
+            run_batch(args, lambda *_: FakeModel())
+        self.assertIn("invalid preset ID", str(ctx.exception))
 
 
 if __name__ == "__main__":
