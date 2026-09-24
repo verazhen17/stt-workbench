@@ -34,10 +34,15 @@ is granted directly to the KSA principal in GCP IAM; no GSA annotation is requir
 kubectl apply -k deploy/k8s/overlays/stag
 ```
 
+The staging overlay image tag must match the full commit SHA of the `main` commit
+being released. Update both `newTag` values in
+`deploy/k8s/overlays/stag/kustomization.yaml` for every release. Changing the
+image tag updates the Deployment pod template and triggers a rolling update.
+
 The staging overlay currently uses:
 
-- `gcr.io/media17-streaming/stt/workbench-backend:stag`
-- `gcr.io/media17-streaming/stt/workbench-frontend:stag`
+- `gcr.io/media17-streaming/stt/workbench-backend:23cd2964d84405898427dae76133e7ec1faef276`
+- `gcr.io/media17-streaming/stt/workbench-frontend:23cd2964d84405898427dae76133e7ec1faef276`
 
 Change those image repositories in the overlay when the image registry is finalized.
 The frontend Service is a `LoadBalancer`; use its assigned `EXTERNAL-IP` as the

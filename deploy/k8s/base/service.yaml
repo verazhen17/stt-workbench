@@ -21,6 +21,9 @@ metadata:
     app.kubernetes.io/name: stt-workbench-frontend
 spec:
   type: LoadBalancer
+  loadBalancerSourceRanges:
+    - "35.194.181.115/32"   # Pritunl_Prod
+    - "34.80.134.123/32"    # Pritunl_PreProd
   ports:
     - name: http
       port: 80
