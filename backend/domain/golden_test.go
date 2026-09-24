@@ -59,7 +59,7 @@ func TestGoldenServiceRenewAndEdit(t *testing.T) {
 	}
 }
 
-func TestGoldenServiceRejectsOverlapAndSegmentCountChange(t *testing.T) {
+func TestGoldenServiceAllowsOverlapAndRejectsSegmentCountChange(t *testing.T) {
 	root := t.TempDir()
 	store := domain.NewFilesystemGoldenStore(os.DirFS(root), root)
 	if err := store.Save(context.Background(), models.Golden{
@@ -70,8 +70,8 @@ func TestGoldenServiceRejectsOverlapAndSegmentCountChange(t *testing.T) {
 	}
 	service := domain.NewGoldenService(store, goldenResultProvider{})
 	_, err := service.Edit(context.Background(), streamA, vodA, []models.GoldenEditSegment{{Timestamps: models.Timestamps{From: "00:00:00.000", To: "00:00:01.500"}, Text: "one"}, {Timestamps: models.Timestamps{From: "00:00:01.000", To: "00:00:02.000"}, Text: "two"}})
-	if !errors.Is(err, domain.ErrGoldenInvalid) {
-		t.Fatalf("Edit() overlap error = %v, want ErrGoldenInvalid", err)
+	if err != nil {
+		t.Fatalf("Edit() overlap error = %v, want nil", err)
 	}
 	_, err = service.Edit(context.Background(), streamA, vodA, []models.GoldenEditSegment{{Timestamps: models.Timestamps{From: "00:00:00.000", To: "00:00:01.000"}, Text: "one"}})
 	if !errors.Is(err, domain.ErrGoldenInvalid) {

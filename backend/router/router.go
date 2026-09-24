@@ -3,6 +3,7 @@ package router
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net"
 	"net/http"
@@ -237,8 +238,8 @@ func (handler streamHandler) align(context *gin.Context) {
 	if errors.Is(err, domain.ErrGoldenNotFound) {
 		if len(validResults) > 0 && selected[0].Error == nil {
 			golden = models.Golden{StreamID: streamID, VODID: vodID, Segments: make([]models.GoldenSegment, 0, len(validResults[0].Segments))}
-			for _, segment := range validResults[0].Segments {
-				golden.Segments = append(golden.Segments, models.GoldenSegment{Timestamps: segment.Timestamps, Text: segment.Text})
+			for index, segment := range validResults[0].Segments {
+				golden.Segments = append(golden.Segments, models.GoldenSegment{SegmentID: fmt.Sprintf("golden_segment_%03d", index+1), Timestamps: segment.Timestamps, Text: segment.Text})
 			}
 		} else {
 			golden = models.Golden{StreamID: streamID, VODID: vodID}

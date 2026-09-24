@@ -66,7 +66,7 @@ func (store *FilesystemGoldenStore) Save(ctx context.Context, golden models.Gold
 	if !validStreamID(golden.StreamID) || !validVODID(golden.VODID) {
 		return fmt.Errorf("%w: invalid identity", ErrGoldenInvalid)
 	}
-	if err := ValidateGoldenSegments(golden.Segments); err != nil {
+	if err := ValidateGoldenIntervals(golden.Segments); err != nil {
 		return err
 	}
 	data, err := json.MarshalIndent(golden, "", "  ")
@@ -137,6 +137,19 @@ func (service *GoldenService) Renew(ctx context.Context, streamID, vodID, source
 
 func (service *GoldenService) Edit(ctx context.Context, streamID, vodID string, edits []models.GoldenEditSegment) (models.Golden, error) {
 	current, err := service.store.Get(ctx, streamID, vodID)
+	if errors.Is(err, ErrGoldenNotFound) {
+		updated := models.Golden{StreamID: streamID, VODID: vodID, UpdatedAt: service.now().UTC(), Segments: make([]models.GoldenSegment, len(edits))}
+		for index, edit := range edits {
+			updated.Segments[index] = models.GoldenSegment{SegmentID: fmt.Sprintf("golden_segment_%03d", index+1), Timestamps: edit.Timestamps, Text: edit.Text}
+		}
+		if err := ValidateGoldenIntervals(updated.Segments); err != nil {
+			return models.Golden{}, err
+		}
+		if err := service.store.Save(ctx, updated); err != nil {
+			return models.Golden{}, err
+		}
+		return updated, nil
+	}
 	if err != nil {
 		return models.Golden{}, err
 	}
@@ -153,7 +166,7 @@ func (service *GoldenService) Edit(ctx context.Context, streamID, vodID string, 
 			Text:       edit.Text,
 		}
 	}
-	if err := ValidateGoldenSegments(updated.Segments); err != nil {
+	if err := ValidateGoldenIntervals(updated.Segments); err != nil {
 		return models.Golden{}, err
 	}
 	if err := service.store.Save(ctx, updated); err != nil {

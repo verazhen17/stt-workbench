@@ -169,10 +169,6 @@ export default function App() {
         setAlignment({ data: alignment.data, loading: false, error: new Error(`Golden row ${index + 1} has an invalid interval.`) });
         return;
       }
-      if (index > 0 && segment.timestamps.from < goldenDraft[index - 1].timestamps.to) {
-        setAlignment({ data: alignment.data, loading: false, error: new Error(`Golden row ${index + 1} overlaps the previous row.`) });
-        return;
-      }
     }
     setGoldenSaving(true);
     try {
