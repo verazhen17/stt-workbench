@@ -64,6 +64,15 @@ func ValidateGoldenSegments(segments []models.GoldenSegment) error {
 	return nil
 }
 
+func ValidateGoldenIntervals(segments []models.GoldenSegment) error {
+	for index, segment := range segments {
+		if _, _, err := parseInterval(segment.Timestamps.From, segment.Timestamps.To); err != nil {
+			return fmt.Errorf("%w: Golden segment %d has invalid interval: %v", ErrGoldenInvalid, index, err)
+		}
+	}
+	return nil
+}
+
 func ValidateSTTSegments(segments []models.STTSegment) error {
 	for index, segment := range segments {
 		if _, _, err := parseInterval(segment.Timestamps.From, segment.Timestamps.To); err != nil {
