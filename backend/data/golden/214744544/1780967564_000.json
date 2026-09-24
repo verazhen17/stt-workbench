@@ -11,6 +11,30 @@
         "from": "00:00:00.000",
         "to": "00:00:01.000"
       }
+    },
+    {
+      "segment_id": "golden_segment_002",
+      "text": "歡迎來到直播間",
+      "timestamps": {
+        "from": "00:00:00.500",
+        "to": "00:00:04.000"
+      }
+    },
+    {
+      "segment_id": "golden_segment_003",
+      "text": "今天我們來測試語音辨識。",
+      "timestamps": {
+        "from": "00:00:04.000",
+        "to": "00:00:06.000"
+      }
+    },
+    {
+      "segment_id": "golden_segment_004",
+      "text": "這一段沒有時間重疊。",
+      "timestamps": {
+        "from": "00:00:06.000",
+        "to": "00:00:08.000"
+      }
     }
   ]
 }

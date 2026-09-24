@@ -452,6 +452,11 @@ export default function App() {
             </div>
           </div>
           {alignment.error && <p className="global-message">{alignment.error.message}</p>}
+          {alignment.data?.warnings && alignment.data.warnings.length > 0 && (
+            <p className="global-message global-warning">
+              Golden timestamps overlap. Rows with a red outline contain overlapping timestamps.
+            </p>
+          )}
           {!alignment.data && !alignment.loading && <div className="empty-state"><span className="empty-icon">↔</span><p>Select a VOD and Baseline Model to load alignment.</p></div>}
           {alignment.loading && <div className="empty-state"><span className="empty-icon">…</span><p>Loading alignment…</p></div>}
           {alignment.data && (
@@ -503,6 +508,7 @@ function AlignmentTable({
   activeRowIndex?: number | null;
   onUserScroll?: () => void;
 }) {
+  const goldenWarningIds = new Set((alignment.warnings ?? []).flatMap((warning) => [warning.segment_id, warning.previous_segment_id]).filter((id): id is string => Boolean(id)));
   const model = (segment: STTSegment) => (
     <button type="button" className="segment-card segment-button segment-card-model" onClick={() => onSeek(segment.timestamps.from)}>
       <span className="segment-timestamps">{segment.timestamps.from}–{segment.timestamps.to}</span>
@@ -510,10 +516,10 @@ function AlignmentTable({
     </button>
   );
   let goldenIndex = 0;
-  const golden = (row: Alignment["rows"][number], rowIndex: number) => {
+  const golden = (row: Alignment["rows"][number], rowIndex: number, hasWarning: boolean) => {
     if (!editing || !row.golden.segment_id) {
       return (
-        <button type="button" className="segment-card golden-button segment-card-golden" onClick={() => onSeek(row.golden.timestamps.from, rowIndex)}>
+        <button type="button" className={`segment-card golden-button segment-card-golden${hasWarning ? " segment-card-warning" : ""}`} title={hasWarning ? "These Golden timestamps overlap another Golden segment." : undefined} onClick={() => onSeek(row.golden.timestamps.from, rowIndex)}>
           <span className="segment-timestamps">{row.golden.timestamps.from}–{row.golden.timestamps.to}</span>
           <span className="segment-text">{row.golden.text || "(empty Golden)"}</span>
         </button>
@@ -558,13 +564,13 @@ function AlignmentTable({
         const isActive = activeRowIndex === index;
         return (
           <div
-            className={`alignment-row${isActive ? " alignment-row-active" : ""}`}
+            className={`alignment-row${isActive ? " alignment-row-active" : ""}${goldenWarningIds.has(row.golden.segment_id ?? "") ? " alignment-row-warning" : ""}`}
             data-alignment-row-index={index}
             data-alignment-start={row.golden.timestamps.from}
             data-alignment-end={row.golden.timestamps.to}
             key={`${row.golden.segment_id ?? "unmatched"}-${row.golden.timestamps.from}-${index}`}
           >
-            <div className="alignment-cell alignment-cell-golden">{golden(row, index)}</div>
+            <div className="alignment-cell alignment-cell-golden">{golden(row, index, goldenWarningIds.has(row.golden.segment_id ?? ""))}</div>
             <div className="alignment-cell alignment-cell-model">
               {(row.models[modelA] ?? []).map((segment, segmentIndex) => (
                 <span key={`${segment.timestamps.from}-${segmentIndex}`}>{model(segment)}</span>

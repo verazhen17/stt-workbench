@@ -57,11 +57,22 @@ export type AlignmentRow = {
   golden: GoldenSegment;
   models: Record<string, STTSegment[]>;
 };
+export type AlignmentWarning = {
+  type: string;
+  scope: string;
+  preset_id?: string;
+  segment_id?: string;
+  previous_segment_id?: string;
+  index: number;
+  previous_index: number;
+  overlap_ms: number;
+};
 export type Alignment = {
   stream_id: string;
   vod_id: string;
   selected_results: SelectedResult[];
   rows: AlignmentRow[];
+  warnings?: AlignmentWarning[];
 };
 
 export type ApiError = {

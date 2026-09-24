@@ -73,13 +73,26 @@ func ValidateSTTSegments(segments []models.STTSegment) error {
 	return nil
 }
 
-func Align(golden models.Golden, results []models.STTResult) ([]models.AlignmentRow, error) {
-	if err := ValidateGoldenSegments(golden.Segments); err != nil {
-		return nil, err
+func Align(golden models.Golden, results []models.STTResult) ([]models.AlignmentRow, []models.AlignmentWarning, error) {
+	warnings := make([]models.AlignmentWarning, 0)
+	goldenIntervals := make([][2]int64, len(golden.Segments))
+	for index, segment := range golden.Segments {
+		start, end, err := parseInterval(segment.Timestamps.From, segment.Timestamps.To)
+		if err != nil {
+			return nil, nil, fmt.Errorf("%w: Golden segment %d has invalid interval: %v", ErrGoldenInvalid, index, err)
+		}
+		goldenIntervals[index] = [2]int64{start, end}
+		if index > 0 && start < goldenIntervals[index-1][1] {
+			warnings = append(warnings, models.AlignmentWarning{
+				Type: "segment_overlap", Scope: "golden", Index: index, PreviousIndex: index - 1,
+				SegmentID: segment.SegmentID, PreviousSegmentID: golden.Segments[index-1].SegmentID,
+				OverlapMS: goldenIntervals[index-1][1] - start,
+			})
+		}
 	}
 	for _, result := range results {
 		if err := ValidateSTTSegments(result.Segments); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 	}
 
@@ -154,5 +167,5 @@ func Align(golden models.Golden, results []models.STTResult) ([]models.Alignment
 	for _, item := range rows {
 		result = append(result, item.alignment)
 	}
-	return result, nil
+	return result, warnings, nil
 }

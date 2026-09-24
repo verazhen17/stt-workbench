@@ -249,14 +249,15 @@ func (handler streamHandler) align(context *gin.Context) {
 	}
 
 	rows := []models.AlignmentRow{}
+	warnings := []models.AlignmentWarning{}
 	if len(validResults) > 0 && (golden.VODID == "" || golden.VODID == vodID) {
-		rows, err = domain.Align(golden, validResults)
+		rows, warnings, err = domain.Align(golden, validResults)
 		if err != nil {
 			handler.writeCatalogError(context, err, "align results")
 			return
 		}
 	}
-	context.JSON(http.StatusOK, models.Alignment{StreamID: streamID, VODID: vodID, SelectedResults: selected, Rows: rows})
+	context.JSON(http.StatusOK, models.Alignment{StreamID: streamID, VODID: vodID, SelectedResults: selected, Rows: rows, Warnings: warnings})
 }
 
 func parsePresetIDs(value string) ([]string, bool) {

@@ -18,6 +18,7 @@ h1 { margin-bottom: 0; font-size: clamp(28px, 4vw, 48px); letter-spacing: -.04em
 h2 { margin-bottom: 0; font-size: 20px; letter-spacing: -.02em; }
 .control-bar { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; margin: 40px 0 20px; padding: 18px; border: 1px solid #ddd8ce; border-radius: 18px; background: rgba(255, 253, 248, .72); }
 .global-message { margin: 0 0 20px; padding: 12px 16px; border: 1px solid #ead8c8; border-radius: 10px; color: #805846; background: #fff6ed; font-size: 13px; }
+.global-warning { padding: 0; border: 0; color: #c04f45; background: transparent; }
 label { display: grid; gap: 8px; color: #6c746f; font-size: 12px; font-weight: 700; }
 .optional { color: #a5a79e; font-weight: 500; }
 select { width: 100%; padding: 12px 14px; border: 1px solid #cfc9bd; border-radius: 10px; color: #22302f; background: #fffdf8; }
@@ -53,6 +54,7 @@ video { display: block; width: 100%; max-width: 420px; aspect-ratio: 9 / 16; mar
 
 .segment-card-golden { background: #fdf6e2; border-color: #faecc7; border-left-color: #dfb958; }
 .segment-card-golden:hover { background: #f8eece; border-color: #f2e0ad; border-left-color: #d1a83e; }
+.segment-card-warning { border-color: #c65d50; border-left-color: #a94338; box-shadow: 0 0 0 2px rgba(198, 93, 80, .28); }
 .segment-card-model { background: #f2f7f3; border-color: #d9e9df; border-left-color: #90bcaa; }
 .segment-card-model:hover { background: #e4efe7; border-color: #cadfd2; border-left-color: #72a893; }
 
