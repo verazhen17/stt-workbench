@@ -24,6 +24,39 @@ STREAM_ID_PATTERN = re.compile(r"^[A-Za-z0-9-]+$")
 DIGITS_PATTERN = re.compile(r"^\d+$")
 
 
+def validate_preset_id(preset_id: str) -> str:
+    try:
+        return str(uuid.UUID(str(preset_id)))
+    except (ValueError, AttributeError, TypeError):
+        raise ValueError(f"invalid preset ID: {preset_id}")
+
+
+def is_valid_result(
+    output_path: Path, expected_vod_id: str, expected_preset_id: str, expected_stream_id: str
+) -> tuple[bool, str | None]:
+    if not output_path.is_file():
+        return False, None
+    try:
+        content = output_path.read_text(encoding="utf-8")
+        if not content.strip():
+            return False, None
+        data = json.loads(content)
+        if not isinstance(data, dict):
+            return False, None
+        if data.get("vod_id") != expected_vod_id:
+            return False, None
+        if data.get("preset_id") != expected_preset_id:
+            return False, None
+        if data.get("stream_id") != expected_stream_id:
+            return False, None
+        if "segments" not in data or not isinstance(data["segments"], list):
+            return False, None
+        detected_lang = data.get("language") or ""
+        return True, detected_lang
+    except Exception:
+        return False, None
+
+
 def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
 
@@ -92,36 +125,58 @@ def run_batch(
     if not stream_dirs:
         raise ValueError("no stream directories found")
 
-    preset_id = str(uuid.uuid4())
-    created_at = utc_now()
+    if getattr(args, "preset_id", None):
+        preset_id = validate_preset_id(args.preset_id)
+    else:
+        preset_id = str(uuid.uuid4())
+
     preset_path = samples_root / "presets" / f"{preset_id}.json"
-    params: dict[str, Any] = {
-        "temperature": getattr(args, "temperature", 0.0),
-        "beam_size": getattr(args, "beam_size", 5),
-        "vad_filter": getattr(args, "vad_filter", True),
-        "device": getattr(args, "device", "cpu"),
-        "compute_type": getattr(args, "compute_type", "int8"),
-    }
-    if getattr(args, "language", ""):
-        params["language"] = args.language
+    if preset_path.is_file():
+        try:
+            preset = json.loads(preset_path.read_text(encoding="utf-8"))
+        except Exception as err:
+            raise ValueError(f"failed to read existing preset {preset_id}: {err}")
+        if not isinstance(preset, dict):
+            raise ValueError(f"invalid preset manifest: {preset_id}")
+        preset.setdefault("stream_ids", [])
+        preset_name = preset.get("name", args.preset_name)
+    else:
+        created_at = utc_now()
+        params: dict[str, Any] = {
+            "temperature": getattr(args, "temperature", 0.0),
+            "beam_size": getattr(args, "beam_size", 5),
+            "vad_filter": getattr(args, "vad_filter", True),
+            "device": getattr(args, "device", "cpu"),
+            "compute_type": getattr(args, "compute_type", "int8"),
+        }
+        if getattr(args, "language", ""):
+            params["language"] = args.language
+        prompt = getattr(args, "prompt", "") or getattr(args, "initial_prompt", "")
+        if prompt:
+            params["initial_prompt"] = prompt
+
+        preset_name = args.preset_name
+        preset: dict[str, Any] = {
+            "preset_id": preset_id,
+            "name": preset_name,
+            "model": {"name": args.model, "params": params},
+            "stream_ids": [],
+            "created_at": created_at,
+            "updated_at": created_at,
+        }
+        atomic_json_write(preset_path, preset)
+
     prompt = getattr(args, "prompt", "") or getattr(args, "initial_prompt", "")
-    if prompt:
-        params["initial_prompt"] = prompt
-
-    preset: dict[str, Any] = {
-        "preset_id": preset_id,
-        "name": args.preset_name,
-        "model": {"name": args.model, "params": params},
-        "stream_ids": [],
-        "created_at": created_at,
-        "updated_at": created_at,
-    }
-    atomic_json_write(preset_path, preset)
-
-    report: dict[str, Any] = {"preset_id": preset_id, "preset_name": args.preset_name, "concurrency": args.concurrency, "items": []}
+    report: dict[str, Any] = {"preset_id": preset_id, "preset_name": preset_name, "concurrency": args.concurrency, "items": []}
     jobs: list[tuple[Path, dict[str, Any], Path]] = []
     output_counts: dict[Path, int] = {}
     for stream_dir in stream_dirs:
+        for tmp_file in stream_dir.glob(".*.tmp"):
+            try:
+                tmp_file.unlink(missing_ok=True)
+            except OSError:
+                pass
+
         wav_files = sorted(stream_dir.glob("*.wav"), key=lambda path: path.name)
         if not wav_files:
             report["items"].append(
@@ -147,13 +202,38 @@ def run_batch(
         wav_path, item, output_path = job
         if output_counts[output_path] > 1:
             item.update(status="failed", error="multiple WAV files map to the same STT output filename")
-        else:
-            runnable_jobs.append((wav_path, item, output_path))
+            continue
+        valid, detected_lang = is_valid_result(output_path, item["vod_id"], preset_id, item["stream_id"])
+        if valid:
+            item["status"] = "completed"
+            if detected_lang:
+                item["language"] = detected_lang
+            continue
+        runnable_jobs.append((wav_path, item, output_path))
 
-    # Count every input, including validation failures: a partial stream must stay hidden.
-    remaining = {stream_dir.name: 0 for stream_dir in stream_dirs}
+    uncompleted = {stream_dir.name: 0 for stream_dir in stream_dirs}
+    failed = {stream_dir.name: 0 for stream_dir in stream_dirs}
     for item in report["items"]:
-        remaining[item["stream_id"]] += 1
+        stream_id = item["stream_id"]
+        status = item.get("status")
+        if status == "completed":
+            pass
+        elif status == "failed":
+            failed[stream_id] += 1
+        else:
+            uncompleted[stream_id] += 1
+
+    preset_updated = False
+    for stream_dir in stream_dirs:
+        s_id = stream_dir.name
+        if uncompleted[s_id] == 0 and failed[s_id] == 0:
+            if s_id not in preset["stream_ids"]:
+                preset["stream_ids"].append(s_id)
+                preset_updated = True
+    if preset_updated:
+        preset["stream_ids"].sort()
+        preset["updated_at"] = utc_now()
+        atomic_json_write(preset_path, preset)
 
     # Each thread owns and reuses its model; increasing concurrency costs model memory.
     worker_state = threading.local()
@@ -198,17 +278,17 @@ def run_batch(
             for future in as_completed(futures):
                 future.result()
                 item = futures[future]
-                if item["status"] != "completed":
-                    continue
                 stream_id = item["stream_id"]
-                remaining[stream_id] -= 1
-                if remaining[stream_id] == 0:
-                    # Only the coordinator writes the shared index, after all result files
-                    # for this stream exist. Other streams need not finish first.
-                    preset["stream_ids"].append(stream_id)
-                    preset["stream_ids"].sort()
-                    preset["updated_at"] = utc_now()
-                    atomic_json_write(preset_path, preset)
+                if item["status"] == "completed":
+                    uncompleted[stream_id] -= 1
+                    if uncompleted[stream_id] == 0 and failed[stream_id] == 0:
+                        if stream_id not in preset["stream_ids"]:
+                            preset["stream_ids"].append(stream_id)
+                            preset["stream_ids"].sort()
+                            preset["updated_at"] = utc_now()
+                            atomic_json_write(preset_path, preset)
+                else:
+                    failed[stream_id] += 1
 
     return report
 
@@ -218,6 +298,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--samples-root", type=Path, default=default_samples_root)
     parser.add_argument("--preset-name", required=True, help="Human-readable name for this run's preset")
+    parser.add_argument("--preset-id", default=None, help="Preset ID UUID to create or resume")
     parser.add_argument("--model", required=True, help="Faster Whisper model name or model directory")
     parser.add_argument(
         "--stream-ids",
@@ -245,6 +326,11 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+    if args.preset_id:
+        try:
+            validate_preset_id(args.preset_id)
+        except ValueError as err:
+            parser.error(str(err))
     if args.beam_size < 1:
         parser.error("--beam-size must be greater than zero")
     if args.concurrency < 1:
