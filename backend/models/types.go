@@ -95,11 +95,21 @@ type AlignmentRow struct {
 	Models map[string][]STTSegment `json:"models"`
 }
 
+type AlignmentWarning struct {
+	Type          string `json:"type"`
+	Scope         string `json:"scope"`
+	PresetID      string `json:"preset_id,omitempty"`
+	Index         int    `json:"index"`
+	PreviousIndex int    `json:"previous_index"`
+	OverlapMS     int64  `json:"overlap_ms"`
+}
+
 type Alignment struct {
-	StreamID        string           `json:"stream_id"`
-	VODID           string           `json:"vod_id"`
-	SelectedResults []SelectedResult `json:"selected_results"`
-	Rows            []AlignmentRow   `json:"rows"`
+	StreamID        string             `json:"stream_id"`
+	VODID           string             `json:"vod_id"`
+	SelectedResults []SelectedResult   `json:"selected_results"`
+	Rows            []AlignmentRow     `json:"rows"`
+	Warnings        []AlignmentWarning `json:"warnings,omitempty"`
 }
 
 type GoldenRequest struct {

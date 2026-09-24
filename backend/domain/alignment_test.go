@@ -22,12 +22,15 @@ func TestAlignAssignsSegmentsAndCreatesUnmatchedRows(t *testing.T) {
 		},
 	}}
 
-	rows, err := domain.Align(golden, results)
+	rows, warnings, err := domain.Align(golden, results)
 	if err != nil {
 		t.Fatalf("Align() error = %v", err)
 	}
 	if len(rows) != 3 {
 		t.Fatalf("rows = %#v, want 3 rows", rows)
+	}
+	if len(warnings) != 0 {
+		t.Fatalf("warnings = %#v, want none", warnings)
 	}
 	if len(rows[0].Models["preset-a"]) != 1 || rows[0].Golden.SegmentID != "g1" {
 		t.Fatalf("first row = %#v, want g1 with model segment", rows[0])
@@ -40,18 +43,21 @@ func TestAlignAssignsSegmentsAndCreatesUnmatchedRows(t *testing.T) {
 	}
 }
 
-func TestAlignRejectsOverlappingGoldenSegments(t *testing.T) {
-	_, err := domain.Align(models.Golden{Segments: []models.GoldenSegment{
+func TestAlignWarnsForOverlappingGoldenSegments(t *testing.T) {
+	_, warnings, err := domain.Align(models.Golden{Segments: []models.GoldenSegment{
 		{Timestamps: models.Timestamps{From: "00:00:00.000", To: "00:00:01.000"}},
 		{Timestamps: models.Timestamps{From: "00:00:00.900", To: "00:00:01.500"}},
 	}}, nil)
-	if !errors.Is(err, domain.ErrGoldenInvalid) {
-		t.Fatalf("Align() error = %v, want ErrGoldenInvalid", err)
+	if err != nil {
+		t.Fatalf("Align() error = %v, want nil", err)
+	}
+	if len(warnings) != 1 || warnings[0].Scope != "golden" || warnings[0].Index != 1 || warnings[0].OverlapMS != 100 {
+		t.Fatalf("warnings = %#v, want one Golden overlap warning", warnings)
 	}
 }
 
 func TestAlignRejectsInvalidResultSegments(t *testing.T) {
-	_, err := domain.Align(models.Golden{}, []models.STTResult{{
+	_, _, err := domain.Align(models.Golden{}, []models.STTResult{{
 		PresetID: "preset-a",
 		Segments: []models.STTSegment{{Timestamps: models.Timestamps{From: "00:00:01.000", To: "00:00:00.500"}}},
 	}})
@@ -61,7 +67,7 @@ func TestAlignRejectsInvalidResultSegments(t *testing.T) {
 }
 
 func TestAlignRejectsMalformedTimestamp(t *testing.T) {
-	_, err := domain.Align(models.Golden{Segments: []models.GoldenSegment{
+	_, _, err := domain.Align(models.Golden{Segments: []models.GoldenSegment{
 		{Timestamps: models.Timestamps{From: "not-a-time", To: "00:00:01.000"}},
 	}}, nil)
 	if !errors.Is(err, domain.ErrGoldenInvalid) {
@@ -70,12 +76,15 @@ func TestAlignRejectsMalformedTimestamp(t *testing.T) {
 }
 
 func TestAlignComparesParsedTimestampsBeyondTwoDigitHours(t *testing.T) {
-	rows, err := domain.Align(models.Golden{Segments: []models.GoldenSegment{
+	rows, warnings, err := domain.Align(models.Golden{Segments: []models.GoldenSegment{
 		{SegmentID: "earlier", Timestamps: models.Timestamps{From: "99:00:00.000", To: "99:00:01.000"}},
 		{SegmentID: "later", Timestamps: models.Timestamps{From: "100:00:00.000", To: "100:00:01.000"}},
 	}}, nil)
 	if err != nil {
 		t.Fatalf("Align() error = %v", err)
+	}
+	if len(warnings) != 0 {
+		t.Fatalf("warnings = %#v, want none", warnings)
 	}
 	if len(rows) != 2 || rows[0].Golden.SegmentID != "earlier" || rows[1].Golden.SegmentID != "later" {
 		t.Fatalf("Align() rows = %#v, want numeric timestamp order", rows)

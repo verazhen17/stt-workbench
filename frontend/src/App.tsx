@@ -452,6 +452,11 @@ export default function App() {
             </div>
           </div>
           {alignment.error && <p className="global-message">{alignment.error.message}</p>}
+          {alignment.data?.warnings && alignment.data.warnings.length > 0 && (
+            <p className="global-message">
+              Alignment completed with {alignment.data.warnings.length} timestamp warning{alignment.data.warnings.length === 1 ? "" : "s"} ({alignment.data.warnings.map((warning) => `${warning.scope} #${warning.index + 1}`).join(", ")}). Rows are shown using the existing alignment rules.
+            </p>
+          )}
           {!alignment.data && !alignment.loading && <div className="empty-state"><span className="empty-icon">↔</span><p>Select a VOD and Baseline Model to load alignment.</p></div>}
           {alignment.loading && <div className="empty-state"><span className="empty-icon">…</span><p>Loading alignment…</p></div>}
           {alignment.data && (
