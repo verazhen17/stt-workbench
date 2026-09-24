@@ -37,7 +37,7 @@ video { display: block; width: 100%; max-width: 420px; aspect-ratio: 9 / 16; mar
 .alignment-row { display: grid; grid-template-columns: minmax(180px, .8fr) minmax(180px, 1fr) minmax(180px, 1fr); min-width: 560px; border-top: 1px solid #e9e4da; transition: background-color .15s ease; }
 .alignment-row:first-child { border-top: 0; }
 .alignment-row-active { background-color: rgba(223, 185, 88, 0.14); box-shadow: inset 4px 0 0 #dfb958; }
-.alignment-row-warning { background-color: rgba(223, 185, 88, 0.1); box-shadow: inset 4px 0 0 #dfb958; }
+.alignment-row-warning { background-color: rgba(198, 93, 80, 0.04); box-shadow: inset 4px 0 0 #c65d50; }
 .alignment-cell { min-width: 0; padding: 12px 14px; display: flex; flex-direction: column; }
 .alignment-header { position: sticky; top: 0; z-index: 1; color: #87908a; background: #f8f5ee; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; }
 .alignment-header .alignment-cell { font-weight: 700; }
@@ -55,7 +55,7 @@ video { display: block; width: 100%; max-width: 420px; aspect-ratio: 9 / 16; mar
 
 .segment-card-golden { background: #fdf6e2; border-color: #faecc7; border-left-color: #dfb958; }
 .segment-card-golden:hover { background: #f8eece; border-color: #f2e0ad; border-left-color: #d1a83e; }
-.segment-card-warning { border-color: #dfb958; border-left-color: #b47f16; box-shadow: 0 0 0 2px rgba(223, 185, 88, .28); }
+.segment-card-warning { border-color: #c65d50; border-left-color: #a94338; box-shadow: 0 0 0 2px rgba(198, 93, 80, .28); }
 .segment-card-model { background: #f2f7f3; border-color: #d9e9df; border-left-color: #90bcaa; }
 .segment-card-model:hover { background: #e4efe7; border-color: #cadfd2; border-left-color: #72a893; }
 
