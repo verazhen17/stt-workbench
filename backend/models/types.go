@@ -96,12 +96,14 @@ type AlignmentRow struct {
 }
 
 type AlignmentWarning struct {
-	Type          string `json:"type"`
-	Scope         string `json:"scope"`
-	PresetID      string `json:"preset_id,omitempty"`
-	Index         int    `json:"index"`
-	PreviousIndex int    `json:"previous_index"`
-	OverlapMS     int64  `json:"overlap_ms"`
+	Type              string `json:"type"`
+	Scope             string `json:"scope"`
+	PresetID          string `json:"preset_id,omitempty"`
+	SegmentID         string `json:"segment_id,omitempty"`
+	PreviousSegmentID string `json:"previous_segment_id,omitempty"`
+	Index             int    `json:"index"`
+	PreviousIndex     int    `json:"previous_index"`
+	OverlapMS         int64  `json:"overlap_ms"`
 }
 
 type Alignment struct {

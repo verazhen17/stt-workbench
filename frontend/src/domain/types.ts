@@ -61,6 +61,8 @@ export type AlignmentWarning = {
   type: string;
   scope: string;
   preset_id?: string;
+  segment_id?: string;
+  previous_segment_id?: string;
   index: number;
   previous_index: number;
   overlap_ms: number;

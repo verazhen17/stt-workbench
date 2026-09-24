@@ -85,24 +85,14 @@ func Align(golden models.Golden, results []models.STTResult) ([]models.Alignment
 		if index > 0 && start < goldenIntervals[index-1][1] {
 			warnings = append(warnings, models.AlignmentWarning{
 				Type: "segment_overlap", Scope: "golden", Index: index, PreviousIndex: index - 1,
+				SegmentID: segment.SegmentID, PreviousSegmentID: golden.Segments[index-1].SegmentID,
 				OverlapMS: goldenIntervals[index-1][1] - start,
 			})
 		}
 	}
 	for _, result := range results {
-		var previousEnd int64
-		for index, segment := range result.Segments {
-			start, end, err := parseInterval(segment.Timestamps.From, segment.Timestamps.To)
-			if err != nil {
-				return nil, nil, fmt.Errorf("%w: segment %d has invalid interval: %v", ErrSegmentsInvalid, index, err)
-			}
-			if index > 0 && start < previousEnd {
-				warnings = append(warnings, models.AlignmentWarning{
-					Type: "segment_overlap", Scope: "stt", PresetID: result.PresetID,
-					Index: index, PreviousIndex: index - 1, OverlapMS: previousEnd - start,
-				})
-			}
-			previousEnd = end
+		if err := ValidateSTTSegments(result.Segments); err != nil {
+			return nil, nil, err
 		}
 	}
 
