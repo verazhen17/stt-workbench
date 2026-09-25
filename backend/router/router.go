@@ -1,12 +1,16 @@
 package router
 
 import (
+	"archive/zip"
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
 	"net"
 	"net/http"
+	"path"
 	"strings"
 	"time"
 
@@ -72,7 +76,134 @@ func NewRouter(dependencies Dependencies) *gin.Engine {
 	router.GET("/api/streams/:stream_id", handler.detail)
 	router.GET("/api/streams/:stream_id/align", handler.align)
 	router.PUT("/api/streams/:stream_id/golden", handler.saveGolden)
+	router.POST("/api/export", handler.export)
 	return router
+}
+
+type exportRequest struct {
+	StreamIDs   []string `json:"stream_ids"`
+	DataSources []string `json:"data_sources"`
+}
+
+func (handler streamHandler) export(context *gin.Context) {
+	var request exportRequest
+	if err := context.ShouldBindJSON(&request); err != nil || len(request.StreamIDs) == 0 || len(request.DataSources) == 0 {
+		writeError(context, http.StatusBadRequest, "invalid_export_request", "stream_ids and data_sources are required.", nil)
+		return
+	}
+	var archive bytes.Buffer
+	writer := zip.NewWriter(&archive)
+	manifest := map[string]any{"stream_ids": request.StreamIDs, "data_sources": request.DataSources}
+	manifestStreams := make([]map[string]any, 0, len(request.StreamIDs))
+	for _, streamID := range request.StreamIDs {
+		vods, err := handler.vods.List(context.Request.Context(), streamID)
+		if err != nil {
+			writer.Close()
+			handler.writeCatalogError(context, err, "export VODs")
+			return
+		}
+		streamManifest := map[string]any{"stream_id": streamID, "vods": []string{}}
+		vodNames := make([]string, 0, len(vods))
+		for _, vod := range vods {
+			vodNames = append(vodNames, vod.VODID)
+			usedNames := map[string]int{}
+			for _, source := range request.DataSources {
+				var data any
+				var name string
+				if source == "golden" {
+					golden, goldenErr := handler.golden.Get(context.Request.Context(), streamID, vod.VODID)
+					if errors.Is(goldenErr, domain.ErrGoldenNotFound) {
+						continue
+					}
+					if goldenErr != nil {
+						writer.Close()
+						handler.writeCatalogError(context, goldenErr, "export Golden")
+						return
+					}
+					data, name = golden, "golden.json"
+				} else {
+					result, preset, resultErr := handler.provider.Get(context.Request.Context(), streamID, vod.VODID, source)
+					if errors.Is(resultErr, domain.ErrSTTResultNotFound) || errors.Is(resultErr, domain.ErrPresetIndexInconsistent) {
+						continue
+					}
+					if resultErr != nil {
+						writer.Close()
+						handler.writeCatalogError(context, resultErr, "export STT result")
+						return
+					}
+					data = result
+					presetName := preset.Name
+					if presetName == "" {
+						presetName = preset.Model.Name
+					}
+					name = safeExportFilename(presetName) + ".json"
+				}
+				baseName := strings.TrimSuffix(name, ".json")
+				if count := usedNames[baseName]; count > 0 {
+					name = fmt.Sprintf("%s_%d.json", baseName, count+1)
+				}
+				usedNames[baseName]++
+				payload, marshalErr := json.MarshalIndent(data, "", "  ")
+				if marshalErr != nil {
+					writer.Close()
+					context.JSON(http.StatusInternalServerError, gin.H{"error": marshalErr.Error()})
+					return
+				}
+				file, createErr := writer.Create(path.Join(streamID, vod.VODID, name))
+				if createErr != nil {
+					writer.Close()
+					context.JSON(http.StatusInternalServerError, gin.H{"error": createErr.Error()})
+					return
+				}
+				if _, writeErr := file.Write(payload); writeErr != nil {
+					writer.Close()
+					context.JSON(http.StatusInternalServerError, gin.H{"error": writeErr.Error()})
+					return
+				}
+			}
+		}
+		streamManifest["vods"] = vodNames
+		manifestStreams = append(manifestStreams, streamManifest)
+	}
+	manifest["streams"] = manifestStreams
+	manifestPayload, err := json.MarshalIndent(manifest, "", "  ")
+	if err != nil {
+		writer.Close()
+		context.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	manifestFile, err := writer.Create("manifest.json")
+	if err != nil {
+		writer.Close()
+		context.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	if _, err = manifestFile.Write(manifestPayload); err != nil {
+		writer.Close()
+		context.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	if err = writer.Close(); err != nil {
+		context.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	context.Data(http.StatusOK, "application/zip", archive.Bytes())
+}
+
+func safeExportFilename(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return "unnamed-preset"
+	}
+	var builder strings.Builder
+	for _, character := range value {
+		if (character >= 'a' && character <= 'z') || (character >= 'A' && character <= 'Z') || (character >= '0' && character <= '9') || character == '-' || character == '_' || character == '.' {
+			builder.WriteRune(character)
+		} else {
+			builder.WriteRune('_')
+		}
+	}
+	return strings.Trim(builder.String(), "_.")
 }
 
 func NewServer(handler http.Handler, logger *slog.Logger) *Server {
@@ -227,7 +358,7 @@ func (handler streamHandler) align(context *gin.Context) {
 		}
 		item := models.SelectedResult{PresetID: preset.PresetID, Model: preset.Model, CreatedAt: result.CreatedAt}
 		if err := domain.ValidateSTTSegments(result.Segments); err != nil {
-			item.Error = &models.SelectedResultError{Code: "invalid_segment", Message: "STT result contains invalid segments."}
+			item.Error = &models.SelectedResultError{Code: "invalid_segment", Message: fmt.Sprintf("STT result contains invalid segments: %v", err)}
 		} else {
 			validResults = append(validResults, result)
 		}
