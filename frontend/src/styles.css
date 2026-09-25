@@ -16,7 +16,7 @@ button, select { font: inherit; }
 h1, h2, p { margin-top: 0; }
 h1 { margin-bottom: 0; font-size: clamp(28px, 4vw, 48px); letter-spacing: -.04em; }
 h2 { margin-bottom: 0; font-size: 20px; letter-spacing: -.02em; }
-.control-bar { display: grid; grid-template-columns: minmax(220px, 1fr) minmax(220px, 1fr) auto; align-items: end; gap: 16px; margin: 40px 0 20px; padding: 18px; border: 1px solid #ddd8ce; border-radius: 18px; background: rgba(255, 253, 248, .72); }
+.control-bar { display: grid; grid-template-columns: minmax(180px, 360px) minmax(180px, 360px) 1fr; align-items: end; gap: 16px; margin: 40px 0 20px; padding: 18px; border: 1px solid #ddd8ce; border-radius: 18px; background: rgba(255, 253, 248, .72); }
 .export-summary { display: flex; align-items: center; justify-content: flex-end; gap: 16px; min-width: 260px; color: #6c746f; font-size: 13px; }
 .primary-button { border: 0 !important; border-radius: 10px !important; padding: 12px 16px !important; color: #fffdf8 !important; background: #a35b42 !important; cursor: pointer; font-weight: 700; }
 .primary-button:hover { background: #8e4d38 !important; }
