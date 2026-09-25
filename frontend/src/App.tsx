@@ -34,6 +34,11 @@ export default function App() {
   const [playerError, setPlayerError] = useState<string>();
   const [modelA, setModelA] = useState("");
   const [modelB, setModelB] = useState("");
+  const [exportOpen, setExportOpen] = useState(false);
+  const [exportScope, setExportScope] = useState<"all" | "selected">("all");
+  const [selectedExportStreams, setSelectedExportStreams] = useState<string[]>([]);
+  const [exportSources, setExportSources] = useState<string[]>(["golden", "baseline"]);
+  const [exportStreamSearch, setExportStreamSearch] = useState("");
   const [alignment, setAlignment] = useState<{ data?: Alignment; loading: boolean; error?: Error }>({ loading: false });
   const [alignmentRevision, setAlignmentRevision] = useState(0);
   const [editingGolden, setEditingGolden] = useState(false);
@@ -332,6 +337,28 @@ export default function App() {
   const modelAName = getPresetName(modelA);
   const modelBName = getPresetName(modelB);
   const catalogMessage = streams.error?.message ?? (streams.loading ? "Loading streams…" : streams.data.length === 0 ? "No streams available." : undefined);
+  const exportableSources = [
+    { id: "golden", label: "Golden" },
+    { id: "baseline", label: "Baseline" },
+    ...presets.data.map((preset) => ({ id: preset.preset_id, label: preset.name || preset.model.name })),
+  ];
+  const filteredExportStreams = streams.data.filter((stream) => stream.stream_id.toLowerCase().includes(exportStreamSearch.toLowerCase()));
+  const exportCount = exportScope === "all" ? streams.data.length : selectedExportStreams.length;
+  const toggleExportSource = (sourceId: string) => {
+    setExportSources((current) => current.includes(sourceId) ? current.filter((id) => id !== sourceId) : [...current, sourceId]);
+  };
+  const createExportManifest = () => {
+    const streamIds = exportScope === "all" ? streams.data.map((stream) => stream.stream_id) : selectedExportStreams;
+    const payload = { preset_filter: filterPresetId || null, stream_ids: streamIds, data_sources: exportSources, created_at: new Date().toISOString() };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = "stt-export-manifest.json";
+    anchor.click();
+    URL.revokeObjectURL(url);
+    setExportOpen(false);
+  };
 
   return (
     <main className="app-shell">
@@ -356,20 +383,10 @@ export default function App() {
             {streams.data.map((stream) => <option key={stream.stream_id} value={stream.stream_id}>{stream.stream_id}</option>)}
           </select>
         </label>
-        <label>
-          Baseline Model (Control)
-          <select value={modelA} onChange={(event) => handleBaselineChange(event.target.value)} disabled={!activeVod || activeVod.stt_results.length === 0}>
-            <option value="">{activeVod?.stt_results.length ? "Select Baseline Model" : "No STT result"}</option>
-            {activeVod?.stt_results.map((result) => <option key={result.preset_id} value={result.preset_id}>{result.name || result.model.name}</option>)}
-          </select>
-        </label>
-        <label>
-          Candidate Model (Experimental) <span className="optional">optional</span>
-          <select value={modelB} onChange={(event) => setModelB(event.target.value)} disabled={!activeVod || activeVod.stt_results.length < 2}>
-            <option value="">None</option>
-            {activeVod?.stt_results.filter((result) => result.preset_id !== modelA).map((result) => <option key={result.preset_id} value={result.preset_id}>{result.name || result.model.name}</option>)}
-          </select>
-        </label>
+        <div className="export-summary">
+          <span>{streams.data.length} streams</span>
+          <button type="button" className="primary-button" onClick={() => setExportOpen(true)} disabled={streams.data.length === 0}>Export filtered streams</button>
+        </div>
       </section>
 
       {catalogMessage && <p className="global-message">{catalogMessage}</p>}
@@ -469,10 +486,26 @@ export default function App() {
               onDraftChange={updateGoldenDraft}
               activeRowIndex={activeRowIndex}
               onUserScroll={pauseAutoScroll}
+              activeVod={activeVod}
+              onBaselineChange={handleBaselineChange}
+              onCandidateChange={setModelB}
             />
           )}
         </article>
       </section>
+      {exportOpen && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setExportOpen(false); }}>
+        <section className="export-modal" role="dialog" aria-modal="true" aria-labelledby="export-title">
+          <div className="panel-heading"><div><p className="eyebrow">EXPORT STT</p><h2 id="export-title">Choose export scope</h2></div><button type="button" className="icon-button" onClick={() => setExportOpen(false)} aria-label="Close">×</button></div>
+          <fieldset><legend>Streams</legend>
+            <label className="radio-row"><input type="radio" checked={exportScope === "all"} onChange={() => setExportScope("all")} /> All filtered streams <span className="muted">{streams.data.length} streams</span></label>
+            <label className="radio-row"><input type="radio" checked={exportScope === "selected"} onChange={() => setExportScope("selected")} /> Select streams</label>
+            {exportScope === "selected" && <div className="stream-picker"><input placeholder="Search stream IDs..." value={exportStreamSearch} onChange={(event) => setExportStreamSearch(event.target.value)} /><label className="checkbox-row"><input type="checkbox" checked={filteredExportStreams.length > 0 && filteredExportStreams.every((stream) => selectedExportStreams.includes(stream.stream_id))} onChange={(event) => setSelectedExportStreams(event.target.checked ? Array.from(new Set([...selectedExportStreams, ...filteredExportStreams.map((stream) => stream.stream_id)])) : selectedExportStreams.filter((id) => !filteredExportStreams.some((stream) => stream.stream_id === id)))} /> Select all visible</label>{filteredExportStreams.map((stream) => <label className="checkbox-row" key={stream.stream_id}><input type="checkbox" checked={selectedExportStreams.includes(stream.stream_id)} onChange={() => setSelectedExportStreams((current) => current.includes(stream.stream_id) ? current.filter((id) => id !== stream.stream_id) : [...current, stream.stream_id])} /> {stream.stream_id}</label>)}</div>}
+          </fieldset>
+          <fieldset><legend>Data to export</legend>{exportableSources.map((source) => <label className="checkbox-row" key={source.id}><input type="checkbox" checked={exportSources.includes(source.id)} onChange={() => toggleExportSource(source.id)} /> {source.label}</label>)}</fieldset>
+          <p className="export-selection-summary">{exportCount} streams · {exportSources.length} data sources</p>
+          <div className="modal-actions"><button type="button" onClick={() => setExportOpen(false)}>Cancel</button><button type="button" className="primary-button" disabled={exportCount === 0 || exportSources.length === 0} onClick={createExportManifest}>Export {exportCount} streams</button></div>
+        </section>
+      </div>}
     </main>
   );
 }
@@ -490,6 +523,9 @@ function AlignmentTable({
   onDraftChange,
   activeRowIndex,
   onUserScroll,
+  activeVod,
+  onBaselineChange,
+  onCandidateChange,
 }: {
   alignment: Alignment;
   modelA: string;
@@ -503,6 +539,9 @@ function AlignmentTable({
   onDraftChange: (index: number, field: "from" | "to" | "text", value: string) => void;
   activeRowIndex?: number | null;
   onUserScroll?: () => void;
+  activeVod?: { stt_results: { preset_id: string; name?: string; model: { name: string } }[] };
+  onBaselineChange: (presetId: string) => void;
+  onCandidateChange: (presetId: string) => void;
 }) {
   const goldenWarningIds = new Set((alignment.warnings ?? []).flatMap((warning) => [warning.segment_id, warning.previous_segment_id]).filter((id): id is string => Boolean(id)));
   const model = (segment: STTSegment) => (
@@ -547,14 +586,18 @@ function AlignmentTable({
         </div>
         <div className="alignment-cell">
           <strong>Baseline (Control)</strong>
-          {modelAName && <span className="header-preset-name">{modelAName}</span>}
+          <select className="header-model-select" value={modelA} onChange={(event) => onBaselineChange(event.target.value)} disabled={!activeVod || activeVod.stt_results.length === 0}>
+            <option value="">{activeVod?.stt_results.length ? "Select Baseline Model" : "No STT result"}</option>
+            {activeVod?.stt_results.map((result) => <option key={result.preset_id} value={result.preset_id}>{result.name || result.model.name}</option>)}
+          </select>
         </div>
-        {modelB && (
-          <div className="alignment-cell">
-            <strong>Candidate (Experimental)</strong>
-            {modelBName && <span className="header-preset-name">{modelBName}</span>}
-          </div>
-        )}
+        <div className="alignment-cell">
+          <strong>Candidate (Experimental)</strong>
+          <select className="header-model-select" value={modelB} onChange={(event) => onCandidateChange(event.target.value)} disabled={!activeVod || activeVod.stt_results.length < 2}>
+            <option value="">None</option>
+            {activeVod?.stt_results.filter((result) => result.preset_id !== modelA).map((result) => <option key={result.preset_id} value={result.preset_id}>{result.name || result.model.name}</option>)}
+          </select>
+        </div>
       </div>
       {alignment.rows.map((row, index) => {
         const isActive = activeRowIndex === index;
