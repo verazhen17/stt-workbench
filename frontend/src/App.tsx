@@ -76,8 +76,11 @@ export default function App() {
   useEffect(() => {
     setStreamId("");
     setVodId("");
+    setExportScope("all");
+    setSelectedExportStreams([]);
+    setExportSources(filterPresetId ? [filterPresetId] : ["golden", ...presets.data.map((preset) => preset.preset_id)]);
     void loadCatalog(filterPresetId || undefined);
-  }, [filterPresetId, loadCatalog]);
+  }, [filterPresetId, loadCatalog, presets.data]);
 
   useEffect(() => {
     if (!streamId) return;
@@ -371,6 +374,16 @@ export default function App() {
   const toggleExportSource = (sourceId: string) => {
     setExportSources((current) => current.includes(sourceId) ? current.filter((id) => id !== sourceId) : [...current, sourceId]);
   };
+  const handleStreamSelection = (nextStreamId: string) => {
+    setStreamId(nextStreamId);
+    if (nextStreamId) {
+      setExportScope("selected");
+      setSelectedExportStreams([nextStreamId]);
+    } else {
+      setExportScope("all");
+      setSelectedExportStreams([]);
+    }
+  };
   const createExportManifest = async () => {
     const streamIds = exportScope === "all" ? streams.data.map((stream) => stream.stream_id) : selectedExportStreams;
     setExporting(true);
@@ -401,7 +414,7 @@ export default function App() {
         </label>
         <label>
           Stream
-          <SearchableSelect value={streamId} placeholder={streams.loading ? "Loading…" : "Select stream"} options={streams.data.map((stream) => ({ value: stream.stream_id, label: stream.stream_id }))} onChange={setStreamId} disabled={streams.loading || streams.data.length === 0} />
+          <SearchableSelect value={streamId} placeholder={streams.loading ? "Loading…" : "No stream selected"} options={[{ value: "", label: "No stream selected" }, ...streams.data.map((stream) => ({ value: stream.stream_id, label: stream.stream_id }))]} onChange={handleStreamSelection} disabled={streams.loading || streams.data.length === 0} />
         </label>
         <div className="export-summary">
           <span>{streams.data.length} streams</span>
