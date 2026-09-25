@@ -6,7 +6,7 @@ resources:
 images:
   - name: stt-workbench-backend
     newName: gcr.io/media17-streaming/stt/workbench-backend
-    newTag: 23cd2964d84405898427dae76133e7ec1faef276
+    newTag: 8f34159487804355c2c16cca931d2da7100c4f28
   - name: stt-workbench-frontend
     newName: gcr.io/media17-streaming/stt/workbench-frontend
-    newTag: 23cd2964d84405898427dae76133e7ec1faef276
+    newTag: 8f34159487804355c2c16cca931d2da7100c4f28

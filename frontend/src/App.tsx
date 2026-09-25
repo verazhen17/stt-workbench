@@ -37,8 +37,9 @@ export default function App() {
   const [exportOpen, setExportOpen] = useState(false);
   const [exportScope, setExportScope] = useState<"all" | "selected">("all");
   const [selectedExportStreams, setSelectedExportStreams] = useState<string[]>([]);
-  const [exportSources, setExportSources] = useState<string[]>(["golden", "baseline"]);
+  const [exportSources, setExportSources] = useState<string[]>(["golden"]);
   const [exportStreamSearch, setExportStreamSearch] = useState("");
+  const [exporting, setExporting] = useState(false);
   const [alignment, setAlignment] = useState<{ data?: Alignment; loading: boolean; error?: Error }>({ loading: false });
   const [alignmentRevision, setAlignmentRevision] = useState(0);
   const [editingGolden, setEditingGolden] = useState(false);
@@ -351,17 +352,19 @@ export default function App() {
   const toggleExportSource = (sourceId: string) => {
     setExportSources((current) => current.includes(sourceId) ? current.filter((id) => id !== sourceId) : [...current, sourceId]);
   };
-  const createExportManifest = () => {
+  const createExportManifest = async () => {
     const streamIds = exportScope === "all" ? streams.data.map((stream) => stream.stream_id) : selectedExportStreams;
-    const payload = { preset_filter: filterPresetId || null, stream_ids: streamIds, data_sources: exportSources, created_at: new Date().toISOString() };
-    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = "stt-export-manifest.json";
-    anchor.click();
-    URL.revokeObjectURL(url);
-    setExportOpen(false);
+    setExporting(true);
+    try {
+      const blob = await api.exportZip(streamIds, exportSources.filter((source) => source !== "baseline"));
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = "stt-export.zip";
+      anchor.click();
+      URL.revokeObjectURL(url);
+      setExportOpen(false);
+    } finally { setExporting(false); }
   };
 
   return (
@@ -504,8 +507,8 @@ export default function App() {
             {exportScope === "selected" && <div className="stream-picker"><input placeholder="Search stream IDs..." value={exportStreamSearch} onChange={(event) => setExportStreamSearch(event.target.value)} /><label className="checkbox-row"><input type="checkbox" checked={filteredExportStreams.length > 0 && filteredExportStreams.every((stream) => selectedExportStreams.includes(stream.stream_id))} onChange={(event) => setSelectedExportStreams(event.target.checked ? Array.from(new Set([...selectedExportStreams, ...filteredExportStreams.map((stream) => stream.stream_id)])) : selectedExportStreams.filter((id) => !filteredExportStreams.some((stream) => stream.stream_id === id)))} /> Select all visible</label>{filteredExportStreams.map((stream) => <label className="checkbox-row" key={stream.stream_id}><input type="checkbox" checked={selectedExportStreams.includes(stream.stream_id)} onChange={() => setSelectedExportStreams((current) => current.includes(stream.stream_id) ? current.filter((id) => id !== stream.stream_id) : [...current, stream.stream_id])} /> {stream.stream_id}</label>)}</div>}
           </fieldset>
           <fieldset><legend>Data to export</legend>{exportableSources.map((source) => <label className="checkbox-row" key={source.id}><input type="checkbox" checked={exportSources.includes(source.id)} onChange={() => toggleExportSource(source.id)} /> {source.label}</label>)}</fieldset>
-          <p className="export-selection-summary">{exportCount} streams · {exportSources.length} data sources</p>
-          <div className="modal-actions"><button type="button" onClick={() => setExportOpen(false)}>Cancel</button><button type="button" className="primary-button" disabled={exportCount === 0 || exportSources.length === 0} onClick={createExportManifest}>Export {exportCount} streams</button></div>
+          <p className="export-selection-summary">{exportCount} streams · {exportSources.filter((source) => source !== "baseline").length} data sources</p>
+          <div className="modal-actions"><button type="button" onClick={() => setExportOpen(false)} disabled={exporting}>Cancel</button><button type="button" className="primary-button" disabled={exporting || exportCount === 0 || exportSources.filter((source) => source !== "baseline").length === 0} onClick={createExportManifest}>{exporting ? "Exporting…" : `Export ${exportCount} streams`}</button></div>
         </section>
       </div>}
     </main>

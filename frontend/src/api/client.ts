@@ -47,6 +47,11 @@ export const api = {
     saveGolden(streamId, { vod_id: vodId, mode: "renew", source_preset_id: sourcePresetId }),
   editGolden: (streamId: string, vodId: string, segments: GoldenEditSegment[]) =>
     saveGolden(streamId, { vod_id: vodId, mode: "edit", segments }),
+  exportZip: async (streamIds: string[], dataSources: string[]) => {
+    const response = await fetch("/api/export", { method: "POST", headers: { "Content-Type": "application/json", Accept: "application/zip" }, body: JSON.stringify({ stream_ids: streamIds, data_sources: dataSources }) });
+    if (!response.ok) throw new Error("Unable to export STT data.");
+    return response.blob();
+  },
 };
 
 function saveGolden(streamId: string, body: { vod_id: string; mode: "renew" | "edit"; source_preset_id?: string; segments?: GoldenEditSegment[] }) {
