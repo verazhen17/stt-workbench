@@ -75,7 +75,8 @@ video { display: block; width: 100%; max-width: 420px; aspect-ratio: 9 / 16; mar
 .radio-row, .checkbox-row { display: flex; align-items: center; gap: 8px; color: #344440; font-size: 13px; font-weight: 500; }
 .radio-row .muted { margin-left: auto; }
 .stream-picker { display: grid; gap: 8px; max-height: 180px; overflow: auto; padding: 10px; border: 1px solid #e3ded4; border-radius: 10px; background: #f8f5ee; }
-.stream-picker input { width: 100%; padding: 9px 10px; border: 1px solid #cfc9bd; border-radius: 8px; background: #fffdf8; }
+.stream-picker > input[type="text"] { width: 100%; padding: 9px 10px; border: 1px solid #cfc9bd; border-radius: 8px; background: #fffdf8; }
+.stream-picker input[type="checkbox"] { width: auto; flex: 0 0 auto; }
 .export-selection-summary { margin: 22px 0; color: #41675c; font-size: 13px; font-weight: 700; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
 .modal-actions button:not(.primary-button) { padding: 10px 14px; border: 1px solid #d7d0c4; border-radius: 9px; color: #41675c; background: #f8f5ee; cursor: pointer; }
