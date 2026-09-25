@@ -227,7 +227,7 @@ func (handler streamHandler) align(context *gin.Context) {
 		}
 		item := models.SelectedResult{PresetID: preset.PresetID, Model: preset.Model, CreatedAt: result.CreatedAt}
 		if err := domain.ValidateSTTSegments(result.Segments); err != nil {
-			item.Error = &models.SelectedResultError{Code: "invalid_segment", Message: "STT result contains invalid segments."}
+			item.Error = &models.SelectedResultError{Code: "invalid_segment", Message: fmt.Sprintf("STT result contains invalid segments: %v", err)}
 		} else {
 			validResults = append(validResults, result)
 		}

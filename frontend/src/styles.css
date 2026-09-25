@@ -45,6 +45,7 @@ video { display: block; width: 100%; max-width: 420px; aspect-ratio: 9 / 16; mar
 .alignment-header { position: sticky; top: 0; z-index: 1; color: #87908a; background: #f8f5ee; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; }
 .alignment-header .alignment-cell { font-weight: 700; }
 .header-model-select { margin-top: 8px; padding: 8px 10px; font-size: 12px; font-weight: 500; letter-spacing: normal; text-transform: none; }
+.alignment-error { display: block; margin-top: 7px; color: #c04f45; font-size: 11px; font-weight: 600; line-height: 1.35; letter-spacing: normal; text-transform: none; }
 .header-preset-name { margin-top: 4px; font-size: 11px; font-weight: 500; letter-spacing: normal; text-transform: none; color: #41675c; word-break: break-word; }
 .alignment-actions { display: flex; align-items: center; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
 .alignment-actions button { padding: 7px 10px; border: 1px solid #d7d0c4; border-radius: 8px; color: #41675c; background: #f8f5ee; cursor: pointer; font-size: 12px; }

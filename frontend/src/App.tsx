@@ -75,11 +75,13 @@ export default function App() {
     const resultIds = activeVod?.stt_results.map((result) => result.preset_id) ?? [];
     let nextA = "";
     setModelA((current) => {
-      nextA = resultIds.includes(current) ? current : resultIds[0] ?? "";
+      nextA = filterPresetId && resultIds.includes(filterPresetId)
+        ? filterPresetId
+        : resultIds.includes(current) ? current : resultIds[0] ?? "";
       return nextA;
     });
     setModelB((current) => (resultIds.includes(current) && current !== nextA ? current : ""));
-  }, [activeVod]);
+  }, [activeVod, filterPresetId]);
 
   useEffect(() => {
     if (!streamId || !activeVod || !modelA) {
@@ -336,10 +338,12 @@ export default function App() {
 
   const modelAName = getPresetName(modelA);
   const modelBName = getPresetName(modelB);
+  const alignmentResultErrors = alignment.data?.selected_results.filter((result) => result.error) ?? [];
+  const goldenAlignmentError = alignment.error && /golden/i.test(alignment.error.message) ? alignment.error.message : undefined;
+  const generalAlignmentError = alignment.error && !goldenAlignmentError ? alignment.error.message : undefined;
   const catalogMessage = streams.error?.message ?? (streams.loading ? "Loading streams…" : streams.data.length === 0 ? "No streams available." : undefined);
   const exportableSources = [
     { id: "golden", label: "Golden" },
-    { id: "baseline", label: "Baseline" },
     ...presets.data.map((preset) => ({ id: preset.preset_id, label: preset.name || preset.model.name })),
   ];
   const filteredExportStreams = streams.data.filter((stream) => stream.stream_id.toLowerCase().includes(exportStreamSearch.toLowerCase()));
@@ -464,12 +468,7 @@ export default function App() {
               )}
             </div>
           </div>
-          {alignment.error && <p className="global-message">{alignment.error.message}</p>}
-          {alignment.data?.warnings && alignment.data.warnings.length > 0 && (
-            <p className="global-message global-warning">
-              Golden timestamps overlap. Rows with a red outline contain overlapping timestamps.
-            </p>
-          )}
+          {generalAlignmentError && <p className="global-message">{generalAlignmentError}</p>}
           {!alignment.data && !alignment.loading && <div className="empty-state"><span className="empty-icon">↔</span><p>Select a VOD and Baseline Model to load alignment.</p></div>}
           {alignment.loading && <div className="empty-state"><span className="empty-icon">…</span><p>Loading alignment…</p></div>}
           {alignment.data && (
@@ -489,6 +488,9 @@ export default function App() {
               activeVod={activeVod}
               onBaselineChange={handleBaselineChange}
               onCandidateChange={setModelB}
+              goldenError={goldenAlignmentError}
+              modelErrors={new Map(alignmentResultErrors.map((result) => [result.preset_id, result.error?.message ?? "Invalid STT result."]))}
+              goldenWarning={Boolean(alignment.data?.warnings?.length)}
             />
           )}
         </article>
@@ -526,6 +528,9 @@ function AlignmentTable({
   activeVod,
   onBaselineChange,
   onCandidateChange,
+  goldenError,
+  modelErrors,
+  goldenWarning,
 }: {
   alignment: Alignment;
   modelA: string;
@@ -542,6 +547,9 @@ function AlignmentTable({
   activeVod?: { stt_results: { preset_id: string; name?: string; model: { name: string } }[] };
   onBaselineChange: (presetId: string) => void;
   onCandidateChange: (presetId: string) => void;
+  goldenError?: string;
+  modelErrors: Map<string, string>;
+  goldenWarning?: boolean;
 }) {
   const goldenWarningIds = new Set((alignment.warnings ?? []).flatMap((warning) => [warning.segment_id, warning.previous_segment_id]).filter((id): id is string => Boolean(id)));
   const model = (segment: STTSegment) => (
@@ -583,6 +591,8 @@ function AlignmentTable({
       <div className="alignment-row alignment-header">
         <div className="alignment-cell">
           <strong>Golden</strong>
+          {goldenError && <span className="alignment-error">{goldenError}</span>}
+          {goldenWarning && <span className="alignment-error">Golden timestamps overlap. Rows with a red outline contain overlapping timestamps.</span>}
         </div>
         <div className="alignment-cell">
           <strong>Baseline (Control)</strong>
@@ -590,6 +600,7 @@ function AlignmentTable({
             <option value="">{activeVod?.stt_results.length ? "Select Baseline Model" : "No STT result"}</option>
             {activeVod?.stt_results.map((result) => <option key={result.preset_id} value={result.preset_id}>{result.name || result.model.name}</option>)}
           </select>
+          {modelA && modelErrors.has(modelA) && <span className="alignment-error">{modelErrors.get(modelA)}</span>}
         </div>
         <div className="alignment-cell">
           <strong>Candidate (Experimental)</strong>
@@ -597,6 +608,7 @@ function AlignmentTable({
             <option value="">None</option>
             {activeVod?.stt_results.filter((result) => result.preset_id !== modelA).map((result) => <option key={result.preset_id} value={result.preset_id}>{result.name || result.model.name}</option>)}
           </select>
+          {modelB && modelErrors.has(modelB) && <span className="alignment-error">{modelErrors.get(modelB)}</span>}
         </div>
       </div>
       {alignment.rows.map((row, index) => {
