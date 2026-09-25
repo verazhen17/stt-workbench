@@ -25,6 +25,25 @@ function timestampToSeconds(timestamp: string): number {
   return Number(timestamp) || 0;
 }
 
+function SearchableSelect({ value, options, placeholder, disabled, onChange }: { value: string; options: { value: string; label: string }[]; placeholder: string; disabled?: boolean; onChange: (value: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const rootRef = useRef<HTMLDivElement>(null);
+  const selected = options.find((option) => option.value === value);
+  const filtered = options.filter((option) => option.label.toLowerCase().includes(query.toLowerCase()));
+  useEffect(() => {
+    const close = (event: MouseEvent) => { if (rootRef.current && !rootRef.current.contains(event.target as Node)) setOpen(false); };
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, []);
+  return <div className={`searchable-select${open ? " searchable-select-open" : ""}`} ref={rootRef}>
+    <button type="button" className="searchable-select-trigger" disabled={disabled} onClick={() => { setOpen((current) => !current); setQuery(""); }}>
+      <span>{selected?.label || placeholder}</span><span className="select-chevron">⌄</span>
+    </button>
+    {open && <div className="searchable-select-menu"><input autoFocus value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search..." />{filtered.length ? filtered.map((option) => <button type="button" className={`searchable-select-option${option.value === value ? " selected" : ""}`} key={option.value} onClick={() => { onChange(option.value); setOpen(false); }}>{option.label}</button>) : <span className="searchable-select-empty">No results found</span>}</div>}
+  </div>;
+}
+
 export default function App() {
   const { presets, streams, detail, loadCatalog, loadDetail } = useWorkspaceData();
   const [filterPresetId, setFilterPresetId] = useState("");
@@ -378,17 +397,11 @@ export default function App() {
       <section className="control-bar" aria-label="workspace selectors">
         <label>
           Preset filter
-          <select value={filterPresetId} onChange={(event) => setFilterPresetId(event.target.value)}>
-            <option value="">All streams</option>
-            {presets.data.map((preset) => <option key={preset.preset_id} value={preset.preset_id}>{preset.name || preset.model.name}</option>)}
-          </select>
+          <SearchableSelect value={filterPresetId} placeholder="All streams" options={[{ value: "", label: "All streams" }, ...presets.data.map((preset) => ({ value: preset.preset_id, label: preset.name || preset.model.name }))]} onChange={setFilterPresetId} />
         </label>
         <label>
           Stream
-          <select value={streamId} onChange={(event) => setStreamId(event.target.value)} disabled={streams.loading || streams.data.length === 0}>
-            <option value="">{streams.loading ? "Loading…" : "Select stream"}</option>
-            {streams.data.map((stream) => <option key={stream.stream_id} value={stream.stream_id}>{stream.stream_id}</option>)}
-          </select>
+          <SearchableSelect value={streamId} placeholder={streams.loading ? "Loading…" : "Select stream"} options={streams.data.map((stream) => ({ value: stream.stream_id, label: stream.stream_id }))} onChange={setStreamId} disabled={streams.loading || streams.data.length === 0} />
         </label>
         <div className="export-summary">
           <span>{streams.data.length} streams</span>
@@ -599,18 +612,12 @@ function AlignmentTable({
         </div>
         <div className="alignment-cell">
           <strong>Baseline (Control)</strong>
-          <select className="header-model-select" value={modelA} onChange={(event) => onBaselineChange(event.target.value)} disabled={!activeVod || activeVod.stt_results.length === 0}>
-            <option value="">{activeVod?.stt_results.length ? "Select Baseline Model" : "No STT result"}</option>
-            {activeVod?.stt_results.map((result) => <option key={result.preset_id} value={result.preset_id}>{result.name || result.model.name}</option>)}
-          </select>
+          <SearchableSelect value={modelA} placeholder={activeVod?.stt_results.length ? "Select Baseline Model" : "No STT result"} options={activeVod?.stt_results.map((result) => ({ value: result.preset_id, label: result.name || result.model.name })) ?? []} onChange={onBaselineChange} disabled={!activeVod || activeVod.stt_results.length === 0} />
           {modelA && modelErrors.has(modelA) && <span className="alignment-error">{modelErrors.get(modelA)}</span>}
         </div>
         <div className="alignment-cell">
           <strong>Candidate (Experimental)</strong>
-          <select className="header-model-select" value={modelB} onChange={(event) => onCandidateChange(event.target.value)} disabled={!activeVod || activeVod.stt_results.length < 2}>
-            <option value="">None</option>
-            {activeVod?.stt_results.filter((result) => result.preset_id !== modelA).map((result) => <option key={result.preset_id} value={result.preset_id}>{result.name || result.model.name}</option>)}
-          </select>
+          <SearchableSelect value={modelB} placeholder="None" options={[{ value: "", label: "None" }, ...(activeVod?.stt_results.filter((result) => result.preset_id !== modelA).map((result) => ({ value: result.preset_id, label: result.name || result.model.name })) ?? [])]} onChange={onCandidateChange} disabled={!activeVod || activeVod.stt_results.length < 2} />
           {modelB && modelErrors.has(modelB) && <span className="alignment-error">{modelErrors.get(modelB)}</span>}
         </div>
       </div>

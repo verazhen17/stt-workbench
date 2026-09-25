@@ -26,6 +26,16 @@ h2 { margin-bottom: 0; font-size: 20px; letter-spacing: -.02em; }
 label { display: grid; gap: 8px; color: #6c746f; font-size: 12px; font-weight: 700; }
 .optional { color: #a5a79e; font-weight: 500; }
 select { width: 100%; padding: 12px 14px; border: 1px solid #cfc9bd; border-radius: 10px; color: #22302f; background: #fffdf8; }
+.searchable-select { position: relative; width: 100%; }
+.searchable-select-trigger { display: flex; width: 100%; align-items: center; justify-content: space-between; padding: 12px 14px; border: 1px solid #cfc9bd; border-radius: 10px; color: #22302f; background: #fffdf8; cursor: pointer; text-align: left; }
+.searchable-select-trigger:disabled { color: #9b9d96; background: #f1eee7; cursor: not-allowed; }
+.searchable-select-open .searchable-select-trigger { border-color: #a35b42; box-shadow: 0 0 0 2px rgba(163, 91, 66, .12); }
+.select-chevron { color: #6c746f; font-size: 16px; }
+.searchable-select-menu { position: absolute; top: calc(100% + 6px); right: 0; left: 0; z-index: 20; display: grid; max-height: 260px; overflow: auto; padding: 8px; border: 1px solid #d7d0c4; border-radius: 10px; background: #fffdf8; box-shadow: 0 14px 30px rgba(75, 67, 54, .15); }
+.searchable-select-menu input { width: 100%; margin-bottom: 6px; padding: 9px 10px; border: 1px solid #cfc9bd; border-radius: 7px; background: #fffdf8; }
+.searchable-select-option { padding: 9px 10px; border: 0; border-radius: 7px; color: #344440; background: transparent; cursor: pointer; text-align: left; }
+.searchable-select-option:hover, .searchable-select-option.selected { background: #f3e4db; }
+.searchable-select-empty { padding: 12px 10px; color: #87908a; font-size: 12px; }
 .workspace { display: grid; grid-template-columns: minmax(280px, .8fr) minmax(480px, 1.7fr); gap: 20px; }
 .panel { min-height: 520px; padding: 24px; border: 1px solid #ddd8ce; border-radius: 20px; background: #fffdf8; box-shadow: 0 14px 36px rgba(75, 67, 54, .06); }
 video { display: block; width: 100%; max-width: 420px; aspect-ratio: 9 / 16; margin: 28px auto 0; border-radius: 12px; background: #172120; object-fit: cover; }
@@ -44,7 +54,8 @@ video { display: block; width: 100%; max-width: 420px; aspect-ratio: 9 / 16; mar
 .alignment-cell { min-width: 0; padding: 12px 14px; display: flex; flex-direction: column; }
 .alignment-header { position: sticky; top: 0; z-index: 1; color: #87908a; background: #f8f5ee; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; }
 .alignment-header .alignment-cell { font-weight: 700; }
-.header-model-select { margin-top: 8px; padding: 8px 10px; font-size: 12px; font-weight: 500; letter-spacing: normal; text-transform: none; }
+.alignment-header .searchable-select { margin-top: 8px; }
+.alignment-header .searchable-select-trigger { padding: 8px 10px; font-size: 12px; font-weight: 500; letter-spacing: normal; text-transform: none; }
 .alignment-error { display: block; margin-top: 7px; color: #c04f45; font-size: 11px; font-weight: 600; line-height: 1.35; letter-spacing: normal; text-transform: none; }
 .header-preset-name { margin-top: 4px; font-size: 11px; font-weight: 500; letter-spacing: normal; text-transform: none; color: #41675c; word-break: break-word; }
 .alignment-actions { display: flex; align-items: center; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
